@@ -125,6 +125,7 @@
                     <option value="auto">系统订单</option>
                     <option value="manual">合伙人订单</option>
                 </select>
+                <label class="checkbox-row"><input type="checkbox" id="filterUnsplitCheckbox" onchange="renderList()"> 💰只看利润未分配</label>
                 <div style="flex:1;"></div>
                 <button class="btn btn-outline" onclick="openCustomerOrderImportModal()">📥 导入客户订单</button>
                 <button class="btn btn-outline" onclick="openImportExcelModal()">📊 批量导入Excel</button>
@@ -1035,6 +1036,7 @@
             let kw = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
             let yearFilter = document.getElementById('filterYear').value;
             let sourceFilter = document.getElementById('filterSource').value;
+            let unsplitOnly = document.getElementById('filterUnsplitCheckbox').checked;
             let firstYearMap = computeFirstYearByCustomer();
 
             let legacyCount = financeOrders.filter(o => !o.deleted && isLegacyRecord(o)).length;
@@ -1054,6 +1056,7 @@
             let filtered = financeOrders.filter(o => {
                 if (o.deleted) return false;
                 if (sourceFilter && o.source !== sourceFilter) return false;
+                if (unsplitOnly && o.profitSplit) return false;
                 if (yearFilter && (o.date || '').slice(0, 4) !== yearFilter) return false;
                 if (kw) {
                     let hay = `${o.customerCompany || ''} ${o.salesperson || ''} ${o.vendor || ''}`.toLowerCase();
