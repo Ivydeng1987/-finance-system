@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <title>财务系统（利润核算） v1.0</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style/dist/xlsx.bundle.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; padding: 16px; color: #1e293b; }
+        .container { max-width: 1700px; margin: 0 auto; }
+        .lock-screen { position: fixed; inset: 0; background: linear-gradient(135deg, #0e4b6e, #1a6d97); display: flex; align-items: center; justify-content: center; z-index: 9999; flex-direction: column; gap: 24px; }
+        .lock-screen .lock-box { background: white; padding: 32px 28px; border-radius: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); text-align: center; max-width: 380px; width: 90%; }
+        .lock-screen .lock-box h2 { font-size: 22px; color: #0e4b6e; margin-bottom: 6px; }
+        .lock-screen .lock-box input { width: 100%; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 16px; outline: none; text-align: center; }
+        .lock-screen .lock-box button { margin-top: 14px; width: 100%; padding: 12px; background: #0e4b6e; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+        .lock-screen .lock-box button:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; background: white; padding: 12px 18px; border-radius: 14px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+        .header h1 { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .header h1 span { background: #0e4b6e; color: white; font-size: 12px; padding: 2px 10px; border-radius: 30px; font-weight: 400; }
+        .header-right { display: flex; align-items: center; gap: 10px; font-size: 13px; flex-wrap: wrap; }
+        .sync-status { font-weight: 500; font-size: 12px; padding: 4px 12px; border-radius: 20px; }
+        .sync-status.success { background: #dcfce7; color: #16a34a; }
+        .sync-status.error { background: #fee2e2; color: #dc2626; }
+
+        .btn { padding: 6px 14px; border: none; border-radius: 30px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-primary { background: #0e4b6e; color: white; }
+        .btn-primary:hover { background: #0a3a55; }
+        .btn-outline { background: white; border: 1px solid #e2e8f0; color: #475569; }
+        .btn-outline:hover { background: #f1f5f9; }
+        .btn-danger { background: #fee2e2; color: #dc2626; }
+        .btn-sm { padding: 4px 10px; font-size: 11px; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .card { background: white; border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); }
+        .card h2 { font-size: 15px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; font-size: 12px; font-weight: 500; color: #475569; margin-bottom: 3px; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 13px; font-family: inherit; }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: #0e4b6e; outline: none; }
+        .form-group input[disabled] { background: #f1f5f9; color: #64748b; }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+        .form-row-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+        .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .checkbox-row input { width: auto; }
+        .field-hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+        .source-tag { display: inline-block; padding: 2px 9px; border-radius: 30px; font-size: 10.5px; font-weight: 500; }
+        .source-auto { background: #e0f2fe; color: #0369a1; }
+        .source-manual { background: #fce7f3; color: #be185d; }
+
+        .table-wrapper { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06); overflow-x: auto; }
+        table.list-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1700px; }
+        table.list-table th { background: #f8fafc; padding: 8px 10px; text-align: left; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+        table.list-table td { padding: 8px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; white-space: nowrap; }
+        table.list-table tr:hover td { background: #fafbfc; }
+        .order-link { color: #0e4b6e; font-weight: 600; cursor: pointer; text-decoration: underline; }
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 30px; font-size: 11px; font-weight: 500; }
+        .badge-yes { background: #dcfce7; color: #16a34a; }
+        .badge-no { background: #fef3c7; color: #d97706; }
+        .badge-new { background: #fff0d6; color: #b45309; }
+
+        .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+        .toolbar input[type="text"] { padding: 6px 14px; border: 1px solid #e2e8f0; border-radius: 30px; font-size: 12px; outline: none; width: 200px; }
+
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+        .modal-overlay.active { display: flex; }
+        .modal { background: white; border-radius: 16px; padding: 20px 24px; width: 100%; max-width: 760px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2); }
+        .modal h2 { font-size: 16px; margin-bottom: 14px; }
+        .modal h3 { font-size: 13px; margin: 16px 0 8px; color: #475569; }
+        .stat-summary { background: #f0f9ff; border-radius: 10px; padding: 12px 16px; font-size: 13px; color: #0e4b6e; margin-bottom: 14px; line-height: 1.8; }
+        .import-hint { background: #fef9e6; border: 1px solid #fde68a; border-radius: 10px; padding: 10px 14px; font-size: 12px; color: #92400e; margin-bottom: 12px; line-height: 1.6; }
+
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #0e4b6e; color: white; padding: 10px 20px; border-radius: 50px; font-size: 13px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); z-index: 2000; opacity: 0; transform: translateY(20px); transition: all 0.3s ease; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: #16a34a; }
+        .toast.error { background: #dc2626; }
+        .hidden { display: none !important; }
+
+        @media (max-width: 640px) {
+            .form-row, .form-row-3, .form-row-4 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="lock-screen" id="lockScreen">
+        <div class="lock-box">
+            <h2>🔒 财务系统</h2>
+            <input type="password" id="passwordInput" placeholder="请输入密码" autofocus>
+            <button id="unlockBtn">解锁</button>
+            <div class="field-hint" style="margin-top:8px;">15分钟不操作会自动重新锁屏</div>
+        </div>
+    </div>
+
+    <div class="container hidden" id="mainContent">
+        <div class="header">
+            <h1>💰 财务系统（利润核算） <span>v1.0</span></h1>
+            <div class="header-right">
+                <span class="sync-status success" id="syncStatus">⏳ 载入中...</span>
+                <button class="btn btn-primary" id="retrySyncBtn" onclick="retrySync()" style="display:none;">🔄 重试同步</button>
+                <button class="btn btn-outline" onclick="backupAllData()">💾 备份全部数据</button>
+                <button class="btn btn-outline" onclick="document.getElementById('importBackupFile').click()">📥 导入备份数据</button>
+                <input type="file" id="importBackupFile" accept=".json" style="display:none;" onchange="importBackupData(event)">
+                <button class="btn btn-outline" onclick="changePassword()">🔑 改密</button>
+                <button class="btn btn-outline" onclick="lockScreen()">🔒 锁定</button>
+            </div>
+        </div>
+
+        <div id="listView">
+            <div class="toolbar">
+                <input type="text" id="searchInput" placeholder="🔍 搜索客户/业务员/VENDOR..." oninput="renderList()">
+                <select id="filterYear" onchange="renderList()"><option value="">全部年份</option></select>
+                <select id="filterSource" onchange="renderList()">
+                    <option value="">全部来源</option>
+                    <option value="auto">系统订单</option>
+                    <option value="manual">合伙人订单</option>
+                </select>
+                <label class="checkbox-row" style="margin-left:4px;"><input type="checkbox" id="showDeletedCheckbox" onchange="renderList()"> 显示已删除</label>
+                <div style="flex:1;"></div>
+                <button class="btn btn-outline" onclick="syncFromCustomerOrders()" id="syncOrdersBtn">🔄 同步客户下单系统订单</button>
+                <button class="btn btn-outline" onclick="openImportExcelModal()">📊 批量导入Excel</button>
+                <button class="btn btn-outline" onclick="exportToExcel()">📤 导出Excel</button>
+                <button class="btn btn-outline" onclick="openStatsModal()">📈 汇总统计</button>
+                <button class="btn btn-primary" onclick="openOrderDetail(null)">➕ 手动添加合伙人订单</button>
+            </div>
+            <div class="table-wrapper">
+                <table class="list-table">
+                    <thead>
+                        <tr>
+                            <th>来源</th>
+                            <th>DATE</th>
+                            <th>客户</th>
+                            <th>新客户</th>
+                            <th>订单金额</th>
+                            <th>收货款</th>
+                            <th>产品</th>
+                            <th>业务员</th>
+                            <th>收款账户</th>
+                            <th>结汇</th>
+                            <th>采购成本</th>
+                            <th>运费</th>
+                            <th>VENDOR</th>
+                            <th>利润</th>
+                            <th>单利润</th>
+                            <th>完结</th>
+                            <th>利润分配</th>
+                            <th>备注</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="detailView" class="hidden">
+            <div class="card">
+                <h2 id="detailTitle">📝 手动添加合伙人订单</h2>
+                <div class="import-hint" id="autoOrderHint" style="display:none;">这条记录是从客户下单系统自动同步过来的：客户/订单金额/产品/采购成本/收款账户这几项每次"同步"都会按系统最新数据刷新；下面这些你自己填的字段（收货款/结汇/运费/业务员/VENDOR/完结/利润分配/备注/是否新客户）不会被同步覆盖，放心填。</div>
+
+                <div class="form-row-4">
+                    <div class="form-group"><label>DATE（订单日期）</label><input type="date" id="fDate"></div>
+                    <div class="form-group"><label>客户</label><input type="text" id="fCustomer"></div>
+                    <div class="form-group"><label>订单金额</label><input type="text" id="fOrderAmount"></div>
+                    <div class="form-group"><label>收货款（实际收到的金额）</label><input type="text" id="fPaymentReceived"></div>
+                </div>
+                <div class="form-group"><label>产品</label><input type="text" id="fProduct"></div>
+                <div class="form-row-4">
+                    <div class="form-group"><label>业务员/合伙人</label><input type="text" id="fSalesperson"></div>
+                    <div class="form-group"><label>收款账户</label><input type="text" id="fReceivingAccount"></div>
+                    <div class="form-group"><label>结汇金额</label><input type="text" id="fSettlement"></div>
+                    <div class="form-group"><label>VENDOR（供应商）</label><input type="text" id="fVendor"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>采购成本</label><input type="text" id="fProcurementCost"></div>
+                    <div class="form-group"><label>运费</label><input type="text" id="fFreight"></div>
+                </div>
+
+                <div class="stat-summary" id="profitPreview">利润：0.00　｜　单利润：0.00</div>
+
+                <div class="form-row">
+                    <div class="checkbox-row"><input type="checkbox" id="fIsPartnerOrder" onchange="updateProfitPreview()"> <label for="fIsPartnerOrder">这是跟合伙人对半分利润的订单</label></div>
+                    <div class="checkbox-row"><input type="checkbox" id="fIsNewCustomer"> <label for="fIsNewCustomer">是否新客户（系统按年自动判断，可在此手动改）</label></div>
+                </div>
+                <div class="form-row">
+                    <div class="checkbox-row"><input type="checkbox" id="fCompleted"> <label for="fCompleted">订单是否完结</label></div>
+                    <div class="checkbox-row"><input type="checkbox" id="fProfitSplit"> <label for="fProfitSplit">利润分配是否已完成</label></div>
+                </div>
+                <div class="form-group"><label>备注</label><textarea id="fRemark" rows="2"></textarea></div>
+
+                <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="saveOrder()">💾 保存</button>
+                    <button class="btn btn-outline" onclick="backToList()">← 返回列表</button>
+                    <button class="btn btn-danger" id="deleteOrderBtn" onclick="deleteCurrentOrder()" style="display:none;">🗑️ 删除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 汇总统计弹窗 ========== -->
+    <div class="modal-overlay" id="statsModal">
+        <div class="modal" style="max-width:900px;">
+            <h2>📈 汇总统计</h2>
+            <div class="stat-summary" id="statsOverall"></div>
+            <h3>按年份</h3>
+            <div class="table-wrapper" style="margin-bottom:16px;">
+                <table class="list-table" style="min-width:640px;">
+                    <thead><tr><th>年份</th><th>订单数</th><th>订单金额合计</th><th>利润合计</th><th>新客户数</th><th>新客户首年下单金额</th></tr></thead>
+                    <tbody id="statsYearBody"></tbody>
+                </table>
+            </div>
+            <h3>按业务员/合伙人</h3>
+            <div class="table-wrapper">
+                <table class="list-table" style="min-width:500px;">
+                    <thead><tr><th>业务员/合伙人</th><th>订单数</th><th>订单金额合计</th><th>利润合计</th></tr></thead>
+                    <tbody id="statsSalespersonBody"></tbody>
+                </table>
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:14px;">
+                <button class="btn btn-outline" onclick="closeModal('statsModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 批量导入Excel弹窗 ========== -->
+    <div class="modal-overlay" id="importExcelModal">
+        <div class="modal" style="max-width:640px;">
+            <h2>📊 批量导入历史订单（Excel）</h2>
+            <div class="import-hint">
+                表头请用这几个名字（顺序不限，多余的列会被忽略）：<br>
+                <b>DATE、客户、是否新客户、订单金额、收货款、产品、业务员、收款账户、结汇、采购成本、运费、VENDOR、订单是否完结、利润分配、备注</b><br>
+                "是否新客户"/"订单是否完结"/"利润分配"这三列填"是"或"否"即可；利润和单利润不用填，导入后系统会自动按公式算。<br>
+                导入进来的记录都会标记为"合伙人订单"来源，日后"同步客户下单系统订单"不会碰它们。
+            </div>
+            <div class="form-group">
+                <label>选择Excel文件（.xlsx）</label>
+                <input type="file" id="importExcelFile" accept=".xlsx,.xls">
+            </div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeModal('importExcelModal')">取消</button>
+                <button class="btn btn-primary" onclick="runImportExcel()">✅ 开始导入</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // ====== 配置信息 ======
+        const BIN_ID = '6aaf8acbffd5d160531b6669';  // 财务系统专用Bin
+        const CUSTOMER_ORDER_BIN_ID = '6a7e7e1bda38895dfee28007';  // 客户下单系统Bin（只读，用于自动同步订单）
+        const WORKER_URL = 'https://sunlit-proxy.ivy-3fc.workers.dev';
+        const ACCESS_TOKEN = 'RBhCP4O1yvwxN7nB9oMoQCzuj2ZnF3M9daOE76fRVtk';
+        const IDLE_LOCK_MS = 15 * 60 * 1000; // 15分钟不操作自动重新锁屏
+
+        let financeOrders = [];
+        let currentOrderId = null;
+        // 真实密码只存在Cloudflare后台（FINANCE_ACCESS_PASSWORD环境变量），这里只是当次会话记住你刚才输对的密码，
+        // 用来给后续每次读写请求带上；不写进localStorage，刷新页面/锁屏后都要重新输，这是特意的，财务数据要求更高
+        let sessionFinancePassword = null;
+
+        // ====== 锁屏（这次改造：网页打开不会先偷偷把数据下载下来，必须密码验证通过Worker才拿得到数据）======
+        document.getElementById('unlockBtn').onclick = async function() {
+            let pwd = document.getElementById('passwordInput').value;
+            if (!pwd) { alert('请输入密码'); return; }
+            let btn = document.getElementById('unlockBtn');
+            btn.disabled = true;
+            btn.innerText = '正在验证...';
+            sessionFinancePassword = pwd;
+
+            let cloud = await getCloudData();
+            if (cloud.ok) {
+                cloudEverLoaded = true;
+                financeOrders = cloud.financeOrders;
+                document.getElementById('lockScreen').style.display = 'none';
+                document.getElementById('mainContent').classList.remove('hidden');
+                document.getElementById('syncStatus').innerText = "✅ 已同步云端";
+                document.getElementById('syncStatus').className = "sync-status success";
+                document.getElementById('passwordInput').value = '';
+                renderList();
+                resetIdleTimer();
+            } else if (cloud.error === 'wrong_password') {
+                sessionFinancePassword = null;
+                alert('密码错误');
+            } else {
+                sessionFinancePassword = null;
+                alert('云端暂时连不上，请检查网络后重试（不会用本地缓存数据顶替，避免看到过期的财务数字）');
+            }
+            btn.disabled = false;
+            btn.innerText = '解锁';
+        };
+        document.getElementById('passwordInput').addEventListener('keydown', e => { if(e.key === 'Enter') document.getElementById('unlockBtn').click(); });
+
+        function lockScreen() {
+            document.getElementById('lockScreen').style.display = 'flex';
+            document.getElementById('mainContent').classList.add('hidden');
+            document.getElementById('passwordInput').value = '';
+            sessionFinancePassword = null;
+            financeOrders = []; // 锁屏后把内存里的数据也清掉，重新解锁才重新拉取
+            cloudEverLoaded = false;
+            clearIdleTimer();
+        }
+
+        // ====== 自动锁屏：15分钟没有鼠标/键盘操作就自动重新锁上 ======
+        let idleTimer = null;
+        function resetIdleTimer() {
+            clearIdleTimer();
+            idleTimer = setTimeout(() => {
+                if (!document.getElementById('mainContent').classList.contains('hidden')) {
+                    lockScreen();
+                    showToast('太久没操作，已自动锁屏', 'error');
+                }
+            }, IDLE_LOCK_MS);
+        }
+        function clearIdleTimer() { if (idleTimer) clearTimeout(idleTimer); }
+        ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'].forEach(evt => {
+            document.addEventListener(evt, () => {
+                if (!document.getElementById('mainContent').classList.contains('hidden')) resetIdleTimer();
+            });
+        });
+
+        function changePassword() {
+            alert('这个财务系统的密码现在存在Cloudflare后台（Worker的环境变量 FINANCE_ACCESS_PASSWORD），不能在网页里直接改。\n\n要改密码：登录 Cloudflare 后台 → Workers 和 Pages → sunlit-proxy → 设置 → 环境变量，把 FINANCE_ACCESS_PASSWORD 改成新密码，保存后新密码立即生效。');
+        }
+
+        // ====== 云端同步（本系统数据；每次读写都要带上财务专属密码，Worker那边会先验证）======
+        async function getCloudData() {
+            try {
+                let res = await fetch(`${WORKER_URL}/bin/${BIN_ID}/latest`, {
+                    headers: { 'X-Access-Token': ACCESS_TOKEN, 'X-Finance-Password': sessionFinancePassword || '' }
+                });
+                if (res.status === 403) return { error: 'wrong_password' };
+                if (res.ok) {
+                    let json = await res.json();
+                    let r = json.record;
+                    if (r && typeof r === 'object') {
+                        return { ok: true, financeOrders: Array.isArray(r.financeOrders) ? r.financeOrders : [] };
+                    }
+                    return { ok: true, financeOrders: [] };
+                }
+                console.log(`拉取失败，状态码: ${res.status}`);
+            } catch(e) { console.log("拉取云端发生网络/解析错误:", e); }
+            return { error: 'network' };
+        }
+
+        let hasPendingSync = false;
+        let cloudEverLoaded = false;
+
+        async function pushCloudData() {
+            if (!sessionFinancePassword) { markSyncFailed(); return false; }
+            try {
+                let payload = { financeOrders };
+                let res = await fetch(`${WORKER_URL}/bin/${BIN_ID}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'X-Access-Token': ACCESS_TOKEN, 'X-Finance-Password': sessionFinancePassword },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    hasPendingSync = false;
+                    document.getElementById('syncStatus').innerText = "✅ 已同步云端";
+                    document.getElementById('syncStatus').className = "sync-status success";
+                    document.getElementById('retrySyncBtn').style.display = 'none';
+                    return true;
+                }
+                console.error("上传失败:", res.status);
+                markSyncFailed();
+                return false;
+            } catch(e) {
+                console.error("上传错误:", e);
+                markSyncFailed();
+                return false;
+            }
+        }
+
+        function markSyncFailed() {
+            hasPendingSync = true;
+            document.getElementById('syncStatus').innerText = "⚠️ 云端连接失败(本次改动暂未同步)";
+            document.getElementById('syncStatus').className = "sync-status error";
+            document.getElementById('retrySyncBtn').style.display = 'inline-flex';
+        }
+
+        async function retrySync() {
+            let btn = document.getElementById('retrySyncBtn');
+            btn.disabled = true;
+            btn.innerText = '🔄 正在重试...';
+            let success;
+            if (!cloudEverLoaded) {
+                let cloud = await getCloudData();
+                if (cloud.ok) {
+                    cloudEverLoaded = true;
+                    financeOrders = cloud.financeOrders;
+                    document.getElementById('syncStatus').innerText = "✅ 已同步云端";
+                    document.getElementById('syncStatus').className = "sync-status success";
+                    document.getElementById('retrySyncBtn').style.display = 'none';
+                    renderList();
+                    success = true;
+                } else {
+                    success = false;
+                }
+            } else {
+                success = await pushCloudData();
+            }
+            btn.disabled = false;
+            btn.innerText = '🔄 重试同步';
+            showToast(success ? '同步成功！' : '还是没连上，请稍后再试', success ? 'success' : 'error');
+        }
+
+        function saveAll() {
+            pushCloudData();
+        }
+
+        function backupAllData() {
+            let payload = { exportedAt: new Date().toISOString(), financeOrders };
+            let blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            let url = URL.createObjectURL(blob);
+            let a = document.createElement('a');
+            a.href = url;
+            a.download = `财务系统_备份_${getToday()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('备份文件已下载');
+        }
+
+        function mergeArrayByKey(current, backupArr, keyFn) {
+            if (!Array.isArray(backupArr)) return 0;
+            let existingKeys = new Set(current.map(keyFn).filter(k => k !== undefined && k !== null && k !== ''));
+            let added = 0;
+            backupArr.forEach(item => {
+                let key = keyFn(item);
+                if (key === undefined || key === null || key === '') return;
+                if (!existingKeys.has(key)) {
+                    current.push(item);
+                    existingKeys.add(key);
+                    added++;
+                }
+            });
+            return added;
+        }
+
+        async function importBackupData(event) {
+            let file = event.target.files[0];
+            if (!file) return;
+            try {
+                let text = await file.text();
+                let backup = JSON.parse(text);
+                if (!backup || typeof backup !== 'object' || Array.isArray(backup)) {
+                    showToast('文件格式不对，这不是一份有效的备份文件', 'error');
+                    return;
+                }
+                if (!Array.isArray(backup.financeOrders)) {
+                    showToast('文件里没有找到财务记录数据，确认是不是财务系统导出的备份文件', 'error');
+                    return;
+                }
+                let added = mergeArrayByKey(financeOrders, backup.financeOrders, o => o.id);
+                if (added === 0) {
+                    showToast('导入完成，但备份里的记录当前数据里都已经有了，没有新增任何内容');
+                } else {
+                    saveAll();
+                    renderList();
+                    showToast(`导入完成：新增 ${added} 条记录`);
+                }
+            } catch (e) {
+                showToast('导入失败，文件可能已损坏或格式不对：' + e.message, 'error');
+            } finally {
+                event.target.value = '';
+            }
+        }
+
+        // ====== 工具函数 ======
+        function getToday() { return new Date().toISOString().split('T')[0]; }
+        function formatDate(d) { return d ? new Date(d).toLocaleDateString('zh-CN') : '—'; }
+        function escapeHtml(s) {
+            if (s === undefined || s === null) return '';
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+        function num(v) { let n = parseFloat(v); return isNaN(n) ? 0 : n; }
+        function fmtMoney(n) { return n ? n.toFixed(2) : '0.00'; }
+        function showToast(msg, type='success') {
+            let el = document.getElementById('toast');
+            el.innerText = msg; el.className = `toast ${type}`; el.classList.add('show');
+            clearTimeout(el._timer); el._timer = setTimeout(()=>el.classList.remove('show'), 2500);
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // ====== 利润计算 ======
+        // 普通订单：利润 = 结汇 - 采购成本 - 运费；跟合伙人对半分的订单，利润再除以2；单利润永远是利润的一半
+        function computeProfit(o) {
+            let gross = num(o.settlementAmount) - num(o.procurementCost) - num(o.freight);
+            let profit = o.isPartnerOrder ? gross / 2 : gross;
+            let unitProfit = profit / 2;
+            return { profit, unitProfit };
+        }
+
+        // "是否新客户"：按自然年判断——某客户在数据里最早出现的那一年，视为其"首年"，
+        // 该年内这个客户的所有订单都算"新客户"订单，方便统计首年一共带来多少下单金额。
+        // 如果某条记录被手动改过（isNewCustomerOverride 有值），以手动改的为准，不再被自动计算覆盖。
+        function computeFirstYearByCustomer() {
+            let map = {};
+            financeOrders.filter(o => !o.deleted).forEach(o => {
+                let year = (o.date || '').slice(0, 4);
+                let key = o.customerCompany || '';
+                if (!key || !year) return;
+                if (!map[key] || year < map[key]) map[key] = year;
+            });
+            return map;
+        }
+        function effectiveIsNewCustomer(o, firstYearMap) {
+            if (o.isNewCustomerOverride !== null && o.isNewCustomerOverride !== undefined) return o.isNewCustomerOverride;
+            let year = (o.date || '').slice(0, 4);
+            let first = firstYearMap[o.customerCompany || ''];
+            return !!(first && year === first);
+        }
+
+        // ====== 同步客户下单系统的订单（自动订单）======
+        // 只刷新"从系统能拿到的"字段（客户/订单金额/产品/采购成本/收款账户/日期），
+        // 你自己填的字段（收货款/结汇/运费/业务员/VENDOR/完结/分成/备注/是否新客户）第一次创建后就不会再被同步覆盖
+        async function fetchCustomerOrderData() {
+            try {
+                let res = await fetch(`${WORKER_URL}/bin/${CUSTOMER_ORDER_BIN_ID}/latest`, { headers: { 'X-Access-Token': ACCESS_TOKEN } });
+                if (res.ok) {
+                    let json = await res.json();
+                    let r = json.record;
+                    if (r && typeof r === 'object') {
+                        return { orders: Array.isArray(r.orders) ? r.orders : [], bankAccounts: Array.isArray(r.bankAccounts) ? r.bankAccounts : [] };
+                    }
+                }
+            } catch(e) { console.error('拉取客户下单系统数据失败:', e); }
+            return null;
+        }
+
+        async function syncFromCustomerOrders() {
+            let btn = document.getElementById('syncOrdersBtn');
+            btn.disabled = true;
+            btn.innerText = '🔄 同步中...';
+            try {
+                let data = await fetchCustomerOrderData();
+                if (!data) { showToast('拉取客户下单系统数据失败，请稍后再试', 'error'); return; }
+
+                let bankMap = {};
+                (data.bankAccounts || []).forEach(b => { bankMap[b.id] = b.alias ? `${b.alias}（${b.currency || ''}）` : ''; });
+
+                let added = 0, updated = 0;
+                data.orders.filter(o => !o.deleted).forEach(co => {
+                    let items = co.items || [];
+                    let orderAmount = items.reduce((s, it) => s + (num(it.amount)), 0);
+                    let procurementCost = items.reduce((s, it) => s + (num(it.costAmount)), 0);
+                    let product = items.map(it => it.name).filter(Boolean).join('、');
+                    let receivingAccount = bankMap[co.bankAccountId] || '';
+
+                    let existing = financeOrders.find(f => f.linkedOrderNo === co.orderNo);
+                    if (existing) {
+                        existing.date = co.orderDate || existing.date;
+                        existing.customerCompany = co.customerCompany || existing.customerCompany;
+                        existing.orderAmount = orderAmount;
+                        existing.product = product;
+                        existing.procurementCost = procurementCost;
+                        existing.receivingAccount = receivingAccount;
+                        updated++;
+                    } else {
+                        financeOrders.push({
+                            id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                            source: 'auto',
+                            linkedOrderNo: co.orderNo,
+                            date: co.orderDate || '',
+                            customerCompany: co.customerCompany || '',
+                            orderAmount, product, procurementCost, receivingAccount,
+                            paymentReceived: co.paid ? orderAmount : '',
+                            settlementAmount: '', freight: '', vendor: '', salesperson: '',
+                            isPartnerOrder: false,
+                            completed: !!co.completed,
+                            profitSplit: false,
+                            remark: '',
+                            isNewCustomerOverride: null,
+                            deleted: false
+                        });
+                        added++;
+                    }
+                });
+
+                saveAll();
+                renderList();
+                showToast(`同步完成：新增 ${added} 条，刷新 ${updated} 条`);
+            } catch(e) {
+                showToast('同步出错：' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerText = '🔄 同步客户下单系统订单';
+            }
+        }
+
+        // ====== 视图切换 ======
+        function backToList() { document.getElementById('detailView').classList.add('hidden'); document.getElementById('listView').classList.remove('hidden'); renderList(); }
+
+        function updateProfitPreview() {
+            let o = {
+                settlementAmount: document.getElementById('fSettlement').value,
+                procurementCost: document.getElementById('fProcurementCost').value,
+                freight: document.getElementById('fFreight').value,
+                isPartnerOrder: document.getElementById('fIsPartnerOrder').checked
+            };
+            let { profit, unitProfit } = computeProfit(o);
+            document.getElementById('profitPreview').innerText = `利润：${fmtMoney(profit)}　｜　单利润：${fmtMoney(unitProfit)}`;
+        }
+
+        function openOrderDetail(id) {
+            document.getElementById('listView').classList.add('hidden');
+            document.getElementById('detailView').classList.remove('hidden');
+
+            if (id) {
+                let o = financeOrders.find(x => x.id === id);
+                if (!o) return;
+                currentOrderId = id;
+                let isAuto = o.source === 'auto';
+                document.getElementById('detailTitle').innerText = isAuto ? `✏️ 编辑记录（系统订单 ${o.linkedOrderNo}）` : '✏️ 编辑合伙人订单';
+                document.getElementById('autoOrderHint').style.display = isAuto ? 'block' : 'none';
+                document.getElementById('fDate').value = o.date || '';
+                document.getElementById('fCustomer').value = o.customerCompany || '';
+                document.getElementById('fOrderAmount').value = o.orderAmount || '';
+                document.getElementById('fProduct').value = o.product || '';
+                document.getElementById('fProcurementCost').value = o.procurementCost || '';
+                document.getElementById('fReceivingAccount').value = o.receivingAccount || '';
+                // 自动订单这几项是从系统拉的，锁住不让手动改，想改要去客户下单系统改，再重新点"同步"
+                ['fDate','fCustomer','fOrderAmount','fProduct','fProcurementCost','fReceivingAccount'].forEach(id2 => {
+                    document.getElementById(id2).disabled = isAuto;
+                });
+                document.getElementById('fPaymentReceived').value = o.paymentReceived || '';
+                document.getElementById('fSalesperson').value = o.salesperson || '';
+                document.getElementById('fSettlement').value = o.settlementAmount || '';
+                document.getElementById('fVendor').value = o.vendor || '';
+                document.getElementById('fFreight').value = o.freight || '';
+                document.getElementById('fIsPartnerOrder').checked = !!o.isPartnerOrder;
+                let firstYearMap = computeFirstYearByCustomer();
+                document.getElementById('fIsNewCustomer').checked = effectiveIsNewCustomer(o, firstYearMap);
+                document.getElementById('fCompleted').checked = !!o.completed;
+                document.getElementById('fProfitSplit').checked = !!o.profitSplit;
+                document.getElementById('fRemark').value = o.remark || '';
+                document.getElementById('deleteOrderBtn').style.display = 'inline-flex';
+            } else {
+                currentOrderId = null;
+                document.getElementById('detailTitle').innerText = '📝 手动添加合伙人订单';
+                document.getElementById('autoOrderHint').style.display = 'none';
+                ['fDate','fCustomer','fOrderAmount','fProduct','fProcurementCost','fReceivingAccount',
+                 'fPaymentReceived','fSalesperson','fSettlement','fVendor','fFreight','fRemark'].forEach(id2 => {
+                    document.getElementById(id2).value = '';
+                    document.getElementById(id2).disabled = false;
+                });
+                document.getElementById('fDate').value = getToday();
+                document.getElementById('fIsPartnerOrder').checked = true;
+                document.getElementById('fIsNewCustomer').checked = false;
+                document.getElementById('fCompleted').checked = false;
+                document.getElementById('fProfitSplit').checked = false;
+                document.getElementById('deleteOrderBtn').style.display = 'none';
+            }
+            updateProfitPreview();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function saveOrder() {
+            let customerCompany = document.getElementById('fCustomer').value.trim();
+            if (!customerCompany) { showToast('请填写客户名称', 'error'); return; }
+
+            let existing = currentOrderId ? financeOrders.find(o => o.id === currentOrderId) : null;
+            let isAuto = existing && existing.source === 'auto';
+
+            let data = existing ? Object.assign({}, existing) : {
+                id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                source: 'manual',
+                linkedOrderNo: null,
+                deleted: false
+            };
+
+            if (!isAuto) {
+                data.date = document.getElementById('fDate').value || getToday();
+                data.customerCompany = customerCompany;
+                data.orderAmount = num(document.getElementById('fOrderAmount').value);
+                data.product = document.getElementById('fProduct').value.trim();
+                data.procurementCost = num(document.getElementById('fProcurementCost').value);
+                data.receivingAccount = document.getElementById('fReceivingAccount').value.trim();
+            }
+            data.paymentReceived = num(document.getElementById('fPaymentReceived').value);
+            data.salesperson = document.getElementById('fSalesperson').value.trim();
+            data.settlementAmount = num(document.getElementById('fSettlement').value);
+            data.vendor = document.getElementById('fVendor').value.trim();
+            data.freight = num(document.getElementById('fFreight').value);
+            data.isPartnerOrder = document.getElementById('fIsPartnerOrder').checked;
+            data.completed = document.getElementById('fCompleted').checked;
+            data.profitSplit = document.getElementById('fProfitSplit').checked;
+            data.remark = document.getElementById('fRemark').value.trim();
+            data.isNewCustomerOverride = document.getElementById('fIsNewCustomer').checked;
+
+            if (existing) {
+                let idx = financeOrders.findIndex(o => o.id === existing.id);
+                financeOrders[idx] = data;
+            } else {
+                financeOrders.push(data);
+            }
+
+            saveAll();
+            showToast(existing ? '记录已更新' : '合伙人订单已添加');
+            backToList();
+        }
+
+        function deleteCurrentOrder() {
+            if (!currentOrderId) return;
+            if (!confirm('删除这条财务记录？')) return;
+            let idx = financeOrders.findIndex(o => o.id === currentOrderId);
+            if (idx !== -1) { financeOrders[idx].deleted = true; financeOrders[idx].deletedAt = getToday(); }
+            saveAll();
+            showToast('已删除');
+            backToList();
+        }
+
+        // ====== 列表渲染 ======
+        function populateListFilters() {
+            let yearSel = document.getElementById('filterYear');
+            let curYear = yearSel.value;
+            let years = [...new Set(financeOrders.map(o => (o.date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+            yearSel.innerHTML = '<option value="">全部年份</option>' + years.map(y => `<option value="${y}">${y}年</option>`).join('');
+            yearSel.value = curYear;
+        }
+
+        function renderList() {
+            populateListFilters();
+            let kw = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
+            let yearFilter = document.getElementById('filterYear').value;
+            let sourceFilter = document.getElementById('filterSource').value;
+            let showDeleted = document.getElementById('showDeletedCheckbox').checked;
+            let firstYearMap = computeFirstYearByCustomer();
+
+            let filtered = financeOrders.filter(o => {
+                if (o.deleted && !showDeleted) return false;
+                if (sourceFilter && o.source !== sourceFilter) return false;
+                if (yearFilter && (o.date || '').slice(0, 4) !== yearFilter) return false;
+                if (kw) {
+                    let hay = `${o.customerCompany || ''} ${o.salesperson || ''} ${o.vendor || ''}`.toLowerCase();
+                    if (!hay.includes(kw)) return false;
+                }
+                return true;
+            });
+            filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+            let html = filtered.map(o => {
+                if (o.deleted) {
+                    return `<tr style="opacity:0.5;">
+                        <td colspan="18">${formatDate(o.date)}　${escapeHtml(o.customerCompany)}　<span class="badge badge-no">已删除</span>　删除时间：${formatDate(o.deletedAt)}</td>
+                        <td>—</td>
+                    </tr>`;
+                }
+                let { profit, unitProfit } = computeProfit(o);
+                let isNew = effectiveIsNewCustomer(o, firstYearMap);
+                let sourceTag = o.source === 'auto' ? '<span class="source-tag source-auto">系统订单</span>' : '<span class="source-tag source-manual">合伙人订单</span>';
+                return `<tr>
+                    <td>${sourceTag}</td>
+                    <td>${formatDate(o.date)}</td>
+                    <td><span class="order-link" onclick="openOrderDetail('${o.id}')">${escapeHtml(o.customerCompany)}</span></td>
+                    <td>${isNew ? '<span class="badge badge-new">新客户</span>' : '—'}</td>
+                    <td>${fmtMoney(num(o.orderAmount))}</td>
+                    <td>${fmtMoney(num(o.paymentReceived))}</td>
+                    <td style="white-space:normal;max-width:200px;">${escapeHtml(o.product) || '—'}</td>
+                    <td>${escapeHtml(o.salesperson) || '—'}</td>
+                    <td>${escapeHtml(o.receivingAccount) || '—'}</td>
+                    <td>${fmtMoney(num(o.settlementAmount))}</td>
+                    <td>${fmtMoney(num(o.procurementCost))}</td>
+                    <td>${fmtMoney(num(o.freight))}</td>
+                    <td>${escapeHtml(o.vendor) || '—'}</td>
+                    <td style="font-weight:600;color:#0e4b6e;">${fmtMoney(profit)}</td>
+                    <td>${fmtMoney(unitProfit)}</td>
+                    <td>${o.completed ? '<span class="badge badge-yes">已完结</span>' : '<span class="badge badge-no">未完结</span>'}</td>
+                    <td>${o.profitSplit ? '<span class="badge badge-yes">已分配</span>' : '<span class="badge badge-no">未分配</span>'}</td>
+                    <td style="white-space:normal;max-width:150px;">${escapeHtml(o.remark) || '—'}</td>
+                    <td><button class="btn btn-outline btn-sm" onclick="openOrderDetail('${o.id}')">编辑</button></td>
+                </tr>`;
+            }).join('');
+            document.getElementById('orderTableBody').innerHTML = html || '<tr><td colspan="19" style="padding:30px;text-align:center;">暂无记录，点右上角"同步客户下单系统订单"或"手动添加合伙人订单"</td></tr>';
+        }
+
+        // ====== 汇总统计 ======
+        function openStatsModal() {
+            renderStats();
+            document.getElementById('statsModal').classList.add('active');
+        }
+
+        function renderStats() {
+            let active = financeOrders.filter(o => !o.deleted);
+            let firstYearMap = computeFirstYearByCustomer();
+
+            let totalOrderAmount = 0, totalProfit = 0, totalCount = active.length;
+            let byYear = {};
+            let bySalesperson = {};
+
+            active.forEach(o => {
+                let { profit } = computeProfit(o);
+                totalOrderAmount += num(o.orderAmount);
+                totalProfit += profit;
+
+                let year = (o.date || '').slice(0, 4) || '未知年份';
+                if (!byYear[year]) byYear[year] = { count: 0, orderAmount: 0, profit: 0, newCustomerSet: new Set(), newCustomerAmount: 0 };
+                byYear[year].count++;
+                byYear[year].orderAmount += num(o.orderAmount);
+                byYear[year].profit += profit;
+                let isNew = effectiveIsNewCustomer(o, firstYearMap);
+                if (isNew) {
+                    byYear[year].newCustomerSet.add(o.customerCompany || '');
+                    byYear[year].newCustomerAmount += num(o.orderAmount);
+                }
+
+                let sp = o.salesperson || '（自营，无业务员/合伙人）';
+                if (!bySalesperson[sp]) bySalesperson[sp] = { count: 0, orderAmount: 0, profit: 0 };
+                bySalesperson[sp].count++;
+                bySalesperson[sp].orderAmount += num(o.orderAmount);
+                bySalesperson[sp].profit += profit;
+            });
+
+            document.getElementById('statsOverall').innerText =
+                `记录总数：${totalCount}　｜　订单金额合计：${fmtMoney(totalOrderAmount)}　｜　利润合计：${fmtMoney(totalProfit)}`;
+
+            let years = Object.keys(byYear).sort().reverse();
+            document.getElementById('statsYearBody').innerHTML = years.map(y => {
+                let d = byYear[y];
+                return `<tr><td>${escapeHtml(y)}</td><td>${d.count}</td><td>${fmtMoney(d.orderAmount)}</td><td>${fmtMoney(d.profit)}</td><td>${d.newCustomerSet.size}</td><td>${fmtMoney(d.newCustomerAmount)}</td></tr>`;
+            }).join('') || '<tr><td colspan="6" style="padding:20px;text-align:center;">暂无数据</td></tr>';
+
+            let salespeople = Object.keys(bySalesperson).sort((a, b) => bySalesperson[b].profit - bySalesperson[a].profit);
+            document.getElementById('statsSalespersonBody').innerHTML = salespeople.map(s => {
+                let d = bySalesperson[s];
+                return `<tr><td>${escapeHtml(s)}</td><td>${d.count}</td><td>${fmtMoney(d.orderAmount)}</td><td>${fmtMoney(d.profit)}</td></tr>`;
+            }).join('') || '<tr><td colspan="4" style="padding:20px;text-align:center;">暂无数据</td></tr>';
+        }
+
+        // ====== 批量导入历史Excel（合伙人订单）======
+        function openImportExcelModal() {
+            document.getElementById('importExcelFile').value = '';
+            document.getElementById('importExcelModal').classList.add('active');
+        }
+
+        function excelDateToStr(v) {
+            if (v === undefined || v === null || v === '') return '';
+            if (typeof v === 'number') {
+                // Excel的日期序列号转成 YYYY-MM-DD
+                let d = XLSX.SSF.parse_date_code(v);
+                if (!d) return '';
+                let mm = String(d.m).padStart(2, '0');
+                let dd = String(d.d).padStart(2, '0');
+                return `${d.y}-${mm}-${dd}`;
+            }
+            let s = String(v).trim();
+            let m = s.match(/(\d{4})[-\/.年](\d{1,2})[-\/.月](\d{1,2})/);
+            if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+            return s;
+        }
+
+        function yesNoToBool(v) {
+            let s = String(v || '').trim();
+            return s === '是' || s.toLowerCase() === 'yes' || s.toLowerCase() === 'true' || s === '1';
+        }
+
+        async function runImportExcel() {
+            let file = document.getElementById('importExcelFile').files[0];
+            if (!file) { showToast('请先选择Excel文件', 'error'); return; }
+            try {
+                let buf = await file.arrayBuffer();
+                let wb = XLSX.read(buf, { type: 'array', cellDates: false });
+                let ws = wb.Sheets[wb.SheetNames[0]];
+                let rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+                if (rows.length === 0) { showToast('这份Excel里没有读到数据', 'error'); return; }
+
+                let added = 0;
+                rows.forEach(row => {
+                    let customerCompany = String(row['客户'] || '').trim();
+                    if (!customerCompany) return; // 没填客户名的行跳过，大概率是空行
+
+                    financeOrders.push({
+                        id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                        source: 'manual',
+                        linkedOrderNo: null,
+                        date: excelDateToStr(row['DATE'] || row['date'] || row['日期']),
+                        customerCompany,
+                        orderAmount: num(row['订单金额']),
+                        paymentReceived: num(row['收货款']),
+                        product: String(row['产品'] || '').trim(),
+                        salesperson: String(row['业务员'] || '').trim(),
+                        receivingAccount: String(row['收款账户'] || '').trim(),
+                        settlementAmount: num(row['结汇']),
+                        procurementCost: num(row['采购成本']),
+                        freight: num(row['运费']),
+                        vendor: String(row['VENDOR'] || row['Vendor'] || '').trim(),
+                        isPartnerOrder: true,
+                        completed: yesNoToBool(row['订单是否完结']),
+                        profitSplit: yesNoToBool(row['利润分配']),
+                        remark: String(row['备注'] || '').trim(),
+                        isNewCustomerOverride: row['是否新客户'] !== undefined && row['是否新客户'] !== '' ? yesNoToBool(row['是否新客户']) : null,
+                        deleted: false
+                    });
+                    added++;
+                });
+
+                if (added === 0) {
+                    showToast('没有识别到有效数据，检查一下"客户"这一列是不是都填了', 'error');
+                    return;
+                }
+
+                saveAll();
+                renderList();
+                closeModal('importExcelModal');
+                showToast(`导入完成，新增 ${added} 条合伙人订单记录`);
+            } catch (e) {
+                showToast('导入失败：' + e.message, 'error');
+            }
+        }
+
+        // ====== 导出Excel ======
+        function exportToExcel() {
+            let firstYearMap = computeFirstYearByCustomer();
+            let active = financeOrders.filter(o => !o.deleted).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+            const thin = { style: 'thin', color: { rgb: '000000' } };
+            const border = { top: thin, bottom: thin, left: thin, right: thin };
+            const headFont = { name: 'Arial', sz: 10, bold: true };
+            const normalFont = { name: 'Arial', sz: 10 };
+            const centerAlign = { horizontal: 'center', vertical: 'center', wrapText: true };
+            const leftAlign = { horizontal: 'left', vertical: 'center', wrapText: true };
+            const blueFill = { fill: { patternType: 'solid', fgColor: { rgb: 'BDD7EE' } } };
+
+            function cell(v, font, align, brd, extra) {
+                let s = { font: font || normalFont, alignment: align || leftAlign };
+                if (brd) s.border = brd;
+                if (extra) Object.assign(s, extra);
+                return { v: v == null ? '' : v, t: typeof v === 'number' ? 'n' : 's', s };
+            }
+
+            let headers = ['DATE','客户','是否新客户','订单金额','收货款','产品','业务员','收款账户','结汇','采购成本','运费','VENDOR','利润','单利润','订单是否完结','利润分配','备注'];
+            let aoa = [headers.map(h => cell(h, headFont, centerAlign, border, blueFill))];
+
+            active.forEach(o => {
+                let { profit, unitProfit } = computeProfit(o);
+                let isNew = effectiveIsNewCustomer(o, firstYearMap);
+                aoa.push([
+                    cell(o.date, normalFont, centerAlign, border),
+                    cell(o.customerCompany, normalFont, leftAlign, border),
+                    cell(isNew ? '是' : '否', normalFont, centerAlign, border),
+                    cell(num(o.orderAmount), normalFont, centerAlign, border),
+                    cell(num(o.paymentReceived), normalFont, centerAlign, border),
+                    cell(o.product, normalFont, leftAlign, border),
+                    cell(o.salesperson, normalFont, centerAlign, border),
+                    cell(o.receivingAccount, normalFont, leftAlign, border),
+                    cell(num(o.settlementAmount), normalFont, centerAlign, border),
+                    cell(num(o.procurementCost), normalFont, centerAlign, border),
+                    cell(num(o.freight), normalFont, centerAlign, border),
+                    cell(o.vendor, normalFont, centerAlign, border),
+                    cell(Number(profit.toFixed(2)), normalFont, centerAlign, border),
+                    cell(Number(unitProfit.toFixed(2)), normalFont, centerAlign, border),
+                    cell(o.completed ? '是' : '否', normalFont, centerAlign, border),
+                    cell(o.profitSplit ? '是' : '否', normalFont, centerAlign, border),
+                    cell(o.remark, normalFont, leftAlign, border)
+                ]);
+            });
+
+            let ws = XLSX.utils.aoa_to_sheet(aoa);
+            ws['!cols'] = [
+                { wch: 11 }, { wch: 16 }, { wch: 9 }, { wch: 11 }, { wch: 11 }, { wch: 22 }, { wch: 10 },
+                { wch: 16 }, { wch: 11 }, { wch: 11 }, { wch: 9 }, { wch: 12 }, { wch: 11 }, { wch: 10 },
+                { wch: 9 }, { wch: 9 }, { wch: 20 }
+            ];
+
+            let wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '财务明细');
+            XLSX.writeFile(wb, `财务系统_利润明细_${getToday()}.xlsx`);
+            showToast('已导出Excel');
+        }
+    </script>
+</body>
+</html>
