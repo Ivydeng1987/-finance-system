@@ -110,6 +110,7 @@
         </div>
 
         <div id="listView">
+            <div class="import-hint hidden" id="legacyRecordBanner"></div>
             <div class="toolbar">
                 <input type="text" id="searchInput" placeholder="🔍 搜索客户/业务员/VENDOR..." oninput="renderList()">
                 <select id="filterYear" onchange="renderList()"><option value="">全部年份</option></select>
@@ -972,6 +973,12 @@
             yearSel.value = curYear;
         }
 
+        // 判断是不是这次改造之前导入的"旧记录"：currency这个字段是这次才加的，老记录里压根没有这个key，
+        // 拿它当标记最可靠——不管你之后有没有手动填过别的字段，只要没经过这次改造后的保存流程，这个字段就是undefined
+        function isLegacyRecord(o) {
+            return o.source === 'auto' && o.currency === undefined;
+        }
+
         function renderList() {
             populateListFilters();
             let kw = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
@@ -979,6 +986,19 @@
             let sourceFilter = document.getElementById('filterSource').value;
             let showDeleted = document.getElementById('showDeletedCheckbox').checked;
             let firstYearMap = computeFirstYearByCustomer();
+
+            let legacyCount = financeOrders.filter(o => !o.deleted && isLegacyRecord(o)).length;
+            let banner = document.getElementById('legacyRecordBanner');
+            if (legacyCount > 0) {
+                banner.classList.remove('hidden');
+                banner.innerHTML = `⚠️ 有 <b>${legacyCount}</b> 条"系统订单"记录是升级DATE/客户简称/收款账户/币种/其他费用这些功能之前导入的，
+                    数据可能还是旧逻辑（DATE=订单日期、客户=全名、收款账户可能被自动填了银行别名，币种/其他费用缺省）。
+                    列表里这几条标了"<span class="badge badge-new" style="vertical-align:middle;">待核对</span>"，
+                    麻烦挨个点开核对一下DATE（改成实际收款日）、客户简称、收款账户这几项，改完点保存就会变成新格式，这条提示也会跟着消失。`;
+            } else {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+            }
 
             let filtered = financeOrders.filter(o => {
                 if (o.deleted && !showDeleted) return false;
@@ -1002,8 +1022,9 @@
                 let { profit, unitProfit } = computeProfit(o);
                 let isNew = effectiveIsNewCustomer(o, firstYearMap);
                 let sourceTag = o.source === 'auto' ? '<span class="source-tag source-auto">系统订单</span>' : '<span class="source-tag source-manual">合伙人订单</span>';
+                let legacyBadge = isLegacyRecord(o) ? ' <span class="badge badge-new" title="DATE/客户简称/收款账户/币种可能是旧数据，点开核对后保存一次即可">待核对</span>' : '';
                 return `<tr>
-                    <td>${sourceTag}</td>
+                    <td>${sourceTag}${legacyBadge}</td>
                     <td>${formatDate(o.date)}</td>
                     <td><span class="order-link" onclick="openOrderDetail('${o.id}')">${escapeHtml(o.customerCompany)}</span></td>
                     <td>${isNew ? '<span class="badge badge-new">新客户</span>' : '—'}</td>
