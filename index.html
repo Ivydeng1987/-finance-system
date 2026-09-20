@@ -553,6 +553,7 @@
             return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
         function num(v) { let n = parseFloat(v); return isNaN(n) ? 0 : n; }
+        function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; } // 修正浮点数加法常见的多余小数位（如605.0000000000001）
         function fmtMoney(n) { return n ? n.toFixed(2) : '0.00'; }
         function showToast(msg, type='success') {
             let el = document.getElementById('toast');
@@ -637,7 +638,7 @@
             }
 
             listEl.innerHTML = list.map(o => {
-                let orderAmount = (o.items || []).reduce((s, it) => s + num(it.amount), 0);
+                let orderAmount = round2((o.items || []).reduce((s, it) => s + num(it.amount), 0));
                 let already = financeOrders.some(f => f.linkedOrderNo === o.orderNo && !f.deleted);
                 let badge = already ? '<span class="badge badge-yes">已导入过，点击刷新</span>' : '<span>→</span>';
                 return `<div class="mini-list-item" onclick='selectCustomerOrderImport(${JSON.stringify(o.orderNo)})'>
@@ -651,7 +652,7 @@
             let co = (customerOrderImportCache.orders || []).find(o => o.orderNo === orderNo);
             if (!co) return;
 
-            let orderAmount = (co.items || []).reduce((s, it) => s + num(it.amount), 0);
+            let orderAmount = round2((co.items || []).reduce((s, it) => s + num(it.amount), 0));
             let customerLabel = co.customerShort || co.customerCompany || '';
 
             let existing = financeOrders.find(f => f.linkedOrderNo === co.orderNo);
@@ -906,7 +907,7 @@
                 document.getElementById('autoOrderHint').style.display = isAuto ? 'block' : 'none';
                 document.getElementById('fDate').value = o.date || '';
                 document.getElementById('fCustomer').value = o.customerCompany || '';
-                document.getElementById('fOrderAmount').value = o.orderAmount || '';
+                document.getElementById('fOrderAmount').value = o.orderAmount ? round2(num(o.orderAmount)) : '';
                 setCurrencyValue(o.currency || 'CNY');
                 setProductValue(o.product || '');
                 document.getElementById('fProcurementCost').value = o.procurementCost || '';
