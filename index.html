@@ -120,7 +120,7 @@
                 </select>
                 <label class="checkbox-row" style="margin-left:4px;"><input type="checkbox" id="showDeletedCheckbox" onchange="renderList()"> 显示已删除</label>
                 <div style="flex:1;"></div>
-                <button class="btn btn-outline" onclick="syncFromCustomerOrders()" id="syncOrdersBtn">🔄 同步客户下单系统订单</button>
+                <button class="btn btn-outline" onclick="openCustomerOrderImportModal()">📥 导入客户订单</button>
                 <button class="btn btn-outline" onclick="openImportExcelModal()">📊 批量导入Excel</button>
                 <button class="btn btn-outline" onclick="exportToExcel()">📤 导出Excel</button>
                 <button class="btn btn-outline" onclick="openStatsModal()">📈 汇总统计</button>
@@ -159,7 +159,7 @@
         <div id="detailView" class="hidden">
             <div class="card">
                 <h2 id="detailTitle">📝 手动添加合伙人订单</h2>
-                <div class="import-hint" id="autoOrderHint" style="display:none;">这条记录是从客户下单系统自动同步过来的：客户/订单金额/产品/采购成本/收款账户这几项每次"同步"都会按系统最新数据刷新；下面这些你自己填的字段（收货款/结汇/运费/业务员/VENDOR/完结/利润分配/备注/是否新客户）不会被同步覆盖，放心填。</div>
+                <div class="import-hint" id="autoOrderHint" style="display:none;">这条记录是从客户下单系统导入的：客户/订单金额/日期/收款账户这几项跟着系统数据走，如果那边订单信息改了，重新从"📥 导入客户订单"里选一次同一张单就能刷新；产品/采购成本/收货款/结汇/运费/业务员/VENDOR/完结/利润分配/备注/是否新客户这些都是你自己填的，不会被覆盖。</div>
 
                 <div class="form-row-4">
                     <div class="form-group"><label>DATE（订单日期）</label><input type="date" id="fDate"></div>
@@ -167,7 +167,16 @@
                     <div class="form-group"><label>订单金额</label><input type="text" id="fOrderAmount"></div>
                     <div class="form-group"><label>收货款（实际收到的金额）</label><input type="text" id="fPaymentReceived"></div>
                 </div>
-                <div class="form-group"><label>产品</label><input type="text" id="fProduct"></div>
+                <div class="form-group">
+                    <label>产品</label>
+                    <select id="fProductSelect" onchange="toggleProductCustom()">
+                        <option value="数控刀具">数控刀具</option>
+                        <option value="塑料切粒刀">塑料切粒刀</option>
+                        <option value="微型磁力泵">微型磁力泵</option>
+                        <option value="custom">手动输入...</option>
+                    </select>
+                    <input type="text" id="fProductCustom" placeholder="请输入产品大类" style="margin-top:6px;display:none;">
+                </div>
                 <div class="form-row-4">
                     <div class="form-group"><label>业务员/合伙人</label><input type="text" id="fSalesperson"></div>
                     <div class="form-group"><label>收款账户</label><input type="text" id="fReceivingAccount"></div>
@@ -175,7 +184,11 @@
                     <div class="form-group"><label>VENDOR（供应商）</label><input type="text" id="fVendor"></div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group"><label>采购成本</label><input type="text" id="fProcurementCost"></div>
+                    <div class="form-group">
+                        <label>采购成本</label>
+                        <input type="text" id="fProcurementCost" oninput="updateProfitPreview()">
+                        <button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openProcurementImportModal()">📥 从采购单导入金额（可多选自动求和）</button>
+                    </div>
                     <div class="form-group"><label>运费</label><input type="text" id="fFreight"></div>
                 </div>
 
@@ -233,7 +246,7 @@
                 表头请用这几个名字（顺序不限，多余的列会被忽略）：<br>
                 <b>DATE、客户、是否新客户、订单金额、收货款、产品、业务员、收款账户、结汇、采购成本、运费、VENDOR、订单是否完结、利润分配、备注</b><br>
                 "是否新客户"/"订单是否完结"/"利润分配"这三列填"是"或"否"即可；利润和单利润不用填，导入后系统会自动按公式算。<br>
-                导入进来的记录都会标记为"合伙人订单"来源，日后"同步客户下单系统订单"不会碰它们。
+                导入进来的记录都会标记为"合伙人订单"来源，不会跟"导入客户订单"那个功能产生冲突。
             </div>
             <div class="form-group">
                 <label>选择Excel文件（.xlsx）</label>
@@ -246,12 +259,40 @@
         </div>
     </div>
 
+    <!-- ========== 导入客户订单弹窗（手动挑选一张，不再一次性全量同步）========== -->
+    <div class="modal-overlay" id="customerOrderImportModal">
+        <div class="modal" style="max-width:700px;">
+            <h2>📥 导入客户订单</h2>
+            <input type="text" id="custOrderImportSearchInput" placeholder="🔍 搜索客户名/单号关键词..." oninput="renderCustomerOrderImportList()" style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:30px; font-size:12px; margin-bottom:10px; outline:none;">
+            <div class="mini-list" id="custOrderImportList" style="max-height:360px;"><div class="mini-list-item">正在加载...</div></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:10px;">
+                <button class="btn btn-outline" onclick="closeModal('customerOrderImportModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========== 从采购单导入金额弹窗（多选求和）========== -->
+    <div class="modal-overlay" id="procurementImportModal">
+        <div class="modal" style="max-width:700px;">
+            <h2>📥 从采购单导入金额</h2>
+            <div class="import-hint">勾选一张或多张采购单，确认后会把这几张的订单总金额加起来，直接填进"采购成本"这一栏（会覆盖当前已填的数字）。</div>
+            <input type="text" id="procImportSearchInput" placeholder="🔍 搜索供应商/单号关键词..." oninput="renderProcurementImportList()" style="width:100%; padding:8px 12px; border:1px solid #e2e8f0; border-radius:30px; font-size:12px; margin-bottom:10px; outline:none;">
+            <div class="mini-list" id="procImportList" style="max-height:340px;"><div class="mini-list-item">正在加载...</div></div>
+            <div class="stat-summary" id="procImportSelectedSummary">已选 0 张，合计 0.00</div>
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-outline" onclick="closeModal('procurementImportModal')">取消</button>
+                <button class="btn btn-primary" onclick="confirmProcurementImport()">✅ 确认导入（求和填入）</button>
+            </div>
+        </div>
+    </div>
+
     <div class="toast" id="toast"></div>
 
     <script>
         // ====== 配置信息 ======
         const BIN_ID = '6aaf8acbffd5d160531b6669';  // 财务系统专用Bin
-        const CUSTOMER_ORDER_BIN_ID = '6a7e7e1bda38895dfee28007';  // 客户下单系统Bin（只读，用于自动同步订单）
+        const CUSTOMER_ORDER_BIN_ID = '6a7e7e1bda38895dfee28007';  // 客户下单系统Bin（只读，用于手动导入订单）
+        const PROCUREMENT_BIN_ID = '6a7af37ef5f4af5e29068975';  // 采购跟单系统Bin（只读，用于导入采购成本）
         const WORKER_URL = 'https://sunlit-proxy.ivy-3fc.workers.dev';
         const ACCESS_TOKEN = 'RBhCP4O1yvwxN7nB9oMoQCzuj2ZnF3M9daOE76fRVtk';
         const IDLE_LOCK_MS = 15 * 60 * 1000; // 15分钟不操作自动重新锁屏
@@ -516,9 +557,10 @@
             return !!(first && year === first);
         }
 
-        // ====== 同步客户下单系统的订单（自动订单）======
-        // 只刷新"从系统能拿到的"字段（客户/订单金额/产品/采购成本/收款账户/日期），
-        // 你自己填的字段（收货款/结汇/运费/业务员/VENDOR/完结/分成/备注/是否新客户）第一次创建后就不会再被同步覆盖
+        // ====== 手动导入客户订单（挑一张导入/刷新，不再一次性全量同步）======
+        // 只拉客户/订单金额/日期/收款账户这几项"系统数据"；产品/采购成本/收货款/结汇/运费/业务员/VENDOR/
+        // 完结/分成/备注/是否新客户都是你自己填的字段，导入或重新导入同一张单都不会碰这些
+        let customerOrderImportCache = null;
         async function fetchCustomerOrderData() {
             try {
                 let res = await fetch(`${WORKER_URL}/bin/${CUSTOMER_ORDER_BIN_ID}/latest`, { headers: { 'X-Access-Token': ACCESS_TOKEN } });
@@ -533,63 +575,183 @@
             return null;
         }
 
-        async function syncFromCustomerOrders() {
-            let btn = document.getElementById('syncOrdersBtn');
-            btn.disabled = true;
-            btn.innerText = '🔄 同步中...';
-            try {
-                let data = await fetchCustomerOrderData();
-                if (!data) { showToast('拉取客户下单系统数据失败，请稍后再试', 'error'); return; }
+        async function openCustomerOrderImportModal() {
+            document.getElementById('customerOrderImportModal').classList.add('active');
+            document.getElementById('custOrderImportSearchInput').value = '';
+            let listEl = document.getElementById('custOrderImportList');
+            listEl.innerHTML = '<div class="mini-list-item">正在加载客户订单列表...</div>';
+            if (!customerOrderImportCache) {
+                customerOrderImportCache = await fetchCustomerOrderData();
+            }
+            renderCustomerOrderImportList();
+        }
 
-                let bankMap = {};
-                (data.bankAccounts || []).forEach(b => { bankMap[b.id] = b.alias ? `${b.alias}（${b.currency || ''}）` : ''; });
+        function renderCustomerOrderImportList() {
+            let listEl = document.getElementById('custOrderImportList');
+            if (!customerOrderImportCache) { listEl.innerHTML = '<div class="mini-list-item">拉取客户下单系统数据失败，请关闭重试</div>'; return; }
+            let kw = (document.getElementById('custOrderImportSearchInput')?.value || '').trim().toLowerCase();
+            let list = customerOrderImportCache.orders.filter(o => !o.deleted);
+            if (kw) {
+                list = list.filter(o => `${o.orderNo} ${o.customerCompany || ''} ${o.customerShort || ''}`.toLowerCase().includes(kw));
+            }
+            list.sort((a, b) => (b.orderNo || '').localeCompare(a.orderNo || ''));
 
-                let added = 0, updated = 0;
-                data.orders.filter(o => !o.deleted).forEach(co => {
-                    let items = co.items || [];
-                    let orderAmount = items.reduce((s, it) => s + (num(it.amount)), 0);
-                    let procurementCost = items.reduce((s, it) => s + (num(it.costAmount)), 0);
-                    let product = items.map(it => it.name).filter(Boolean).join('、');
-                    let receivingAccount = bankMap[co.bankAccountId] || '';
+            if (list.length === 0) {
+                listEl.innerHTML = `<div class="mini-list-item">${kw ? '没有匹配的客户订单' : '没有找到客户订单数据'}</div>`;
+                return;
+            }
 
-                    let existing = financeOrders.find(f => f.linkedOrderNo === co.orderNo);
-                    if (existing) {
-                        existing.date = co.orderDate || existing.date;
-                        existing.customerCompany = co.customerCompany || existing.customerCompany;
-                        existing.orderAmount = orderAmount;
-                        existing.product = product;
-                        existing.procurementCost = procurementCost;
-                        existing.receivingAccount = receivingAccount;
-                        updated++;
-                    } else {
-                        financeOrders.push({
-                            id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-                            source: 'auto',
-                            linkedOrderNo: co.orderNo,
-                            date: co.orderDate || '',
-                            customerCompany: co.customerCompany || '',
-                            orderAmount, product, procurementCost, receivingAccount,
-                            paymentReceived: co.paid ? orderAmount : '',
-                            settlementAmount: '', freight: '', vendor: '', salesperson: '',
-                            isPartnerOrder: false,
-                            completed: !!co.completed,
-                            profitSplit: false,
-                            remark: '',
-                            isNewCustomerOverride: null,
-                            deleted: false
-                        });
-                        added++;
-                    }
-                });
+            listEl.innerHTML = list.map(o => {
+                let orderAmount = (o.items || []).reduce((s, it) => s + num(it.amount), 0);
+                let already = financeOrders.some(f => f.linkedOrderNo === o.orderNo && !f.deleted);
+                let badge = already ? '<span class="badge badge-yes">已导入过，点击刷新</span>' : '<span>→</span>';
+                return `<div class="mini-list-item" onclick='selectCustomerOrderImport(${JSON.stringify(o.orderNo)})'>
+                    <div class="info"><b>${escapeHtml(o.orderNo)}　${escapeHtml(o.customerShort || o.customerCompany || '')}</b><span>${formatDate(o.orderDate)} ｜ 订单金额 ${fmtMoney(orderAmount)}</span></div>
+                    ${badge}
+                </div>`;
+            }).join('');
+        }
 
+        function selectCustomerOrderImport(orderNo) {
+            let co = (customerOrderImportCache.orders || []).find(o => o.orderNo === orderNo);
+            if (!co) return;
+            let bankMap = {};
+            (customerOrderImportCache.bankAccounts || []).forEach(b => { bankMap[b.id] = b.alias ? `${b.alias}（${b.currency || ''}）` : ''; });
+
+            let orderAmount = (co.items || []).reduce((s, it) => s + num(it.amount), 0);
+            let receivingAccount = bankMap[co.bankAccountId] || '';
+
+            let existing = financeOrders.find(f => f.linkedOrderNo === co.orderNo);
+            if (existing) {
+                existing.date = co.orderDate || existing.date;
+                existing.customerCompany = co.customerCompany || existing.customerCompany;
+                existing.orderAmount = orderAmount;
+                existing.receivingAccount = receivingAccount;
+                existing.deleted = false;
                 saveAll();
-                renderList();
-                showToast(`同步完成：新增 ${added} 条，刷新 ${updated} 条`);
-            } catch(e) {
-                showToast('同步出错：' + e.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = '🔄 同步客户下单系统订单';
+                closeModal('customerOrderImportModal');
+                showToast('已刷新这张订单的客户/金额/收款账户信息');
+                openOrderDetail(existing.id);
+                return;
+            }
+
+            let newRecord = {
+                id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                source: 'auto',
+                linkedOrderNo: co.orderNo,
+                date: co.orderDate || '',
+                customerCompany: co.customerCompany || '',
+                orderAmount,
+                receivingAccount,
+                product: '',
+                procurementCost: '',
+                paymentReceived: co.paid ? orderAmount : '',
+                settlementAmount: '', freight: '', vendor: '', salesperson: '',
+                isPartnerOrder: false,
+                completed: !!co.completed,
+                profitSplit: false,
+                remark: '',
+                isNewCustomerOverride: null,
+                deleted: false
+            };
+            financeOrders.push(newRecord);
+            saveAll();
+            closeModal('customerOrderImportModal');
+            showToast('已导入，请补充产品大类/采购成本等信息后保存');
+            openOrderDetail(newRecord.id);
+        }
+
+        // ====== 从采购单导入金额（多选求和，填进"采购成本"）======
+        let procurementImportCache = null;
+        async function fetchProcurementOrderData() {
+            try {
+                let res = await fetch(`${WORKER_URL}/bin/${PROCUREMENT_BIN_ID}/latest`, { headers: { 'X-Access-Token': ACCESS_TOKEN } });
+                if (res.ok) {
+                    let json = await res.json();
+                    let r = json.record;
+                    if (r && typeof r === 'object') return Array.isArray(r.orders) ? r.orders : [];
+                }
+            } catch(e) { console.error('拉取采购跟单系统数据失败:', e); }
+            return null;
+        }
+
+        async function openProcurementImportModal() {
+            document.getElementById('procurementImportModal').classList.add('active');
+            document.getElementById('procImportSearchInput').value = '';
+            let listEl = document.getElementById('procImportList');
+            listEl.innerHTML = '<div class="mini-list-item">正在加载采购单列表...</div>';
+            if (!procurementImportCache) {
+                procurementImportCache = await fetchProcurementOrderData();
+            }
+            renderProcurementImportList();
+            updateProcImportSummary();
+        }
+
+        function renderProcurementImportList() {
+            let listEl = document.getElementById('procImportList');
+            if (!procurementImportCache) { listEl.innerHTML = '<div class="mini-list-item">拉取采购跟单系统数据失败，请关闭重试</div>'; return; }
+            let kw = (document.getElementById('procImportSearchInput')?.value || '').trim().toLowerCase();
+            let list = procurementImportCache.filter(o => !o.deleted);
+            if (kw) {
+                list = list.filter(o => `${o.orderNo} ${o.supplierCompany || ''} ${o.supplierShort || ''}`.toLowerCase().includes(kw));
+            }
+            list.sort((a, b) => (b.orderNo || '').localeCompare(a.orderNo || ''));
+
+            if (list.length === 0) {
+                listEl.innerHTML = `<div class="mini-list-item">${kw ? '没有匹配的采购单' : '没有找到采购单数据'}</div>`;
+                return;
+            }
+
+            listEl.innerHTML = list.map(o => {
+                let amount = (o.items || []).reduce((s, it) => s + num(it.amount), 0);
+                return `<div class="import-item-row">
+                    <input type="checkbox" class="proc-import-check" data-orderno="${escapeHtml(o.orderNo)}" data-amount="${amount}" onchange="updateProcImportSummary()">
+                    <span style="flex:1;">${escapeHtml(o.orderNo)}　${escapeHtml(o.supplierShort || o.supplierCompany || '')}　${formatDate(o.orderDate)}　金额:${fmtMoney(amount)}</span>
+                </div>`;
+            }).join('');
+        }
+
+        function updateProcImportSummary() {
+            let checks = document.querySelectorAll('.proc-import-check:checked');
+            let total = 0;
+            checks.forEach(c => { total += num(c.dataset.amount); });
+            document.getElementById('procImportSelectedSummary').innerText = `已选 ${checks.length} 张，合计 ${fmtMoney(total)}`;
+        }
+
+        function confirmProcurementImport() {
+            let checks = document.querySelectorAll('.proc-import-check:checked');
+            if (checks.length === 0) { showToast('请至少勾选一张采购单', 'error'); return; }
+            let total = 0;
+            let orderNos = [];
+            checks.forEach(c => { total += num(c.dataset.amount); orderNos.push(c.dataset.orderno); });
+            document.getElementById('fProcurementCost').value = total.toFixed(2);
+            updateProfitPreview();
+            closeModal('procurementImportModal');
+            showToast(`已把 ${orderNos.join('、')} 这 ${orderNos.length} 张采购单的金额合计（${fmtMoney(total)}）填入采购成本`);
+        }
+
+        // ====== 产品大类下拉 ======
+        function toggleProductCustom() {
+            let isCustom = document.getElementById('fProductSelect').value === 'custom';
+            document.getElementById('fProductCustom').style.display = isCustom ? 'block' : 'none';
+        }
+        function getProductValue() {
+            let sel = document.getElementById('fProductSelect');
+            return sel.value === 'custom' ? document.getElementById('fProductCustom').value.trim() : sel.value;
+        }
+        function setProductValue(value) {
+            let sel = document.getElementById('fProductSelect');
+            let options = Array.from(sel.options).map(o => o.value);
+            if (!value) {
+                sel.value = '数控刀具';
+                document.getElementById('fProductCustom').style.display = 'none';
+            } else if (options.includes(value)) {
+                sel.value = value;
+                document.getElementById('fProductCustom').style.display = 'none';
+            } else {
+                sel.value = 'custom';
+                document.getElementById('fProductCustom').value = value;
+                document.getElementById('fProductCustom').style.display = 'block';
             }
         }
 
@@ -621,11 +783,12 @@
                 document.getElementById('fDate').value = o.date || '';
                 document.getElementById('fCustomer').value = o.customerCompany || '';
                 document.getElementById('fOrderAmount').value = o.orderAmount || '';
-                document.getElementById('fProduct').value = o.product || '';
+                setProductValue(o.product || '');
                 document.getElementById('fProcurementCost').value = o.procurementCost || '';
                 document.getElementById('fReceivingAccount').value = o.receivingAccount || '';
-                // 自动订单这几项是从系统拉的，锁住不让手动改，想改要去客户下单系统改，再重新点"同步"
-                ['fDate','fCustomer','fOrderAmount','fProduct','fProcurementCost','fReceivingAccount'].forEach(id2 => {
+                // 自动订单只有客户/订单金额/日期/收款账户是从系统拉的，锁住不让手动改，想改要重新去"导入客户订单"里选一次刷新；
+                // 产品大类和采购成本现在始终可以自己填/改，不受来源限制
+                ['fDate','fCustomer','fOrderAmount','fReceivingAccount'].forEach(id2 => {
                     document.getElementById(id2).disabled = isAuto;
                 });
                 document.getElementById('fPaymentReceived').value = o.paymentReceived || '';
@@ -644,11 +807,12 @@
                 currentOrderId = null;
                 document.getElementById('detailTitle').innerText = '📝 手动添加合伙人订单';
                 document.getElementById('autoOrderHint').style.display = 'none';
-                ['fDate','fCustomer','fOrderAmount','fProduct','fProcurementCost','fReceivingAccount',
+                ['fDate','fCustomer','fOrderAmount','fProcurementCost','fReceivingAccount',
                  'fPaymentReceived','fSalesperson','fSettlement','fVendor','fFreight','fRemark'].forEach(id2 => {
                     document.getElementById(id2).value = '';
                     document.getElementById(id2).disabled = false;
                 });
+                setProductValue('');
                 document.getElementById('fDate').value = getToday();
                 document.getElementById('fIsPartnerOrder').checked = true;
                 document.getElementById('fIsNewCustomer').checked = false;
@@ -678,10 +842,10 @@
                 data.date = document.getElementById('fDate').value || getToday();
                 data.customerCompany = customerCompany;
                 data.orderAmount = num(document.getElementById('fOrderAmount').value);
-                data.product = document.getElementById('fProduct').value.trim();
-                data.procurementCost = num(document.getElementById('fProcurementCost').value);
                 data.receivingAccount = document.getElementById('fReceivingAccount').value.trim();
             }
+            data.product = getProductValue();
+            data.procurementCost = num(document.getElementById('fProcurementCost').value);
             data.paymentReceived = num(document.getElementById('fPaymentReceived').value);
             data.salesperson = document.getElementById('fSalesperson').value.trim();
             data.settlementAmount = num(document.getElementById('fSettlement').value);
