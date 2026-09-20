@@ -142,6 +142,7 @@
                             <th>结汇</th>
                             <th>采购成本</th>
                             <th>运费</th>
+                            <th>其他费用</th>
                             <th>VENDOR</th>
                             <th>利润</th>
                             <th>单利润</th>
@@ -159,13 +160,25 @@
         <div id="detailView" class="hidden">
             <div class="card">
                 <h2 id="detailTitle">📝 手动添加合伙人订单</h2>
-                <div class="import-hint" id="autoOrderHint" style="display:none;">这条记录是从客户下单系统导入的：客户/订单金额/日期/收款账户这几项跟着系统数据走，如果那边订单信息改了，重新从"📥 导入客户订单"里选一次同一张单就能刷新；产品/采购成本/收货款/结汇/运费/业务员/VENDOR/完结/利润分配/备注/是否新客户这些都是你自己填的，不会被覆盖。</div>
+                <div class="import-hint" id="autoOrderHint" style="display:none;">这条记录是从客户下单系统导入的：客户简称/订单金额这两项跟着系统数据走，如果那边订单信息改了，重新从"📥 导入客户订单"里选一次同一张单就能刷新；DATE（记的是你收款的日期，不是系统下单日期）、产品/采购成本/收货款/收款账户/结汇/运费/业务员/VENDOR/完结/利润分配/备注/是否新客户这些都是你自己填的，不会被覆盖。</div>
 
                 <div class="form-row-4">
                     <div class="form-group"><label>DATE（订单日期）</label><input type="date" id="fDate"></div>
                     <div class="form-group"><label>客户</label><input type="text" id="fCustomer"></div>
-                    <div class="form-group"><label>订单金额</label><input type="text" id="fOrderAmount"></div>
-                    <div class="form-group"><label>收货款（实际收到的金额）</label><input type="text" id="fPaymentReceived"></div>
+                    <div class="form-group">
+                        <label>订单金额</label>
+                        <input type="text" id="fOrderAmount">
+                        <select id="fCurrencySelect" onchange="toggleCurrencyCustom()" style="margin-top:6px;">
+                            <option value="CNY">CNY（人民币）</option>
+                            <option value="USD">USD</option>
+                            <option value="THB">THB（泰铢）</option>
+                            <option value="HKD">HKD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="custom">手动输入...</option>
+                        </select>
+                        <input type="text" id="fCurrencyCustom" placeholder="请输入币种代码，如VND" style="margin-top:6px;display:none;">
+                    </div>
+                    <div class="form-group"><label>收货款（实际收到的金额，跟订单金额同币种）</label><input type="text" id="fPaymentReceived"></div>
                 </div>
                 <div class="form-group">
                     <label>产品</label>
@@ -180,7 +193,7 @@
                 <div class="form-row-4">
                     <div class="form-group"><label>业务员/合伙人</label><input type="text" id="fSalesperson"></div>
                     <div class="form-group"><label>收款账户</label><input type="text" id="fReceivingAccount"></div>
-                    <div class="form-group"><label>结汇金额</label><input type="text" id="fSettlement"></div>
+                    <div class="form-group"><label>结汇金额（人民币）</label><input type="text" id="fSettlement" oninput="updateProfitPreview()"></div>
                     <div class="form-group"><label>VENDOR（供应商）</label><input type="text" id="fVendor"></div>
                 </div>
                 <div class="form-row">
@@ -189,10 +202,21 @@
                         <input type="text" id="fProcurementCost" oninput="updateProfitPreview()">
                         <button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="openProcurementImportModal()">📥 从采购单导入金额（可多选自动求和）</button>
                     </div>
-                    <div class="form-group"><label>运费</label><input type="text" id="fFreight"></div>
+                    <div class="form-group"><label>运费</label><input type="text" id="fFreight" oninput="updateProfitPreview()"></div>
                 </div>
+                <div class="form-group"><label>其他费用</label><input type="text" id="fOtherFee" oninput="updateProfitPreview()"></div>
 
-                <div class="stat-summary" id="profitPreview">利润：0.00　｜　单利润：0.00</div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>利润（自动算，也可以手动改）</label>
+                        <input type="text" id="fProfit" oninput="onProfitManualEdit()">
+                        <button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="resetProfitToAuto()">🔄 恢复自动计算</button>
+                    </div>
+                    <div class="form-group">
+                        <label>单利润（利润的一半，跟着利润走）</label>
+                        <div class="stat-summary" id="unitProfitPreview" style="margin-bottom:0;">单利润：0.00</div>
+                    </div>
+                </div>
 
                 <div class="form-row">
                     <div class="checkbox-row"><input type="checkbox" id="fIsPartnerOrder" onchange="updateProfitPreview()"> <label for="fIsPartnerOrder">这是跟合伙人对半分利润的订单</label></div>
@@ -244,7 +268,8 @@
             <h2>📊 批量导入历史订单（Excel）</h2>
             <div class="import-hint">
                 表头请用这几个名字（顺序不限，多余的列会被忽略）：<br>
-                <b>DATE、客户、是否新客户、订单金额、收货款、产品、业务员、收款账户、结汇、采购成本、运费、VENDOR、订单是否完结、利润分配、备注</b><br>
+                <b>DATE、客户、是否新客户、订单金额、币种、收货款、产品、业务员、收款账户、结汇、采购成本、运费、其他费用、VENDOR、订单是否完结、利润分配、备注</b><br>
+                "币种"不填默认按人民币(CNY)处理；结汇是人民币金额，不用填币种。<br>
                 "是否新客户"/"订单是否完结"/"利润分配"这三列填"是"或"否"即可；利润和单利润不用填，导入后系统会自动按公式算。<br>
                 导入进来的记录都会标记为"合伙人订单"来源，不会跟"导入客户订单"那个功能产生冲突。
             </div>
@@ -529,12 +554,14 @@
         function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
         // ====== 利润计算 ======
-        // 普通订单：利润 = 结汇 - 采购成本 - 运费；跟合伙人对半分的订单，利润再除以2；单利润永远是利润的一半
+        // 普通订单：利润 = 结汇 - 采购成本 - 运费 - 其他费用；跟合伙人对半分的订单，利润再除以2；单利润永远是利润的一半
+        // 如果这条记录手动改过利润（profitOverride 有值），直接用手动改的数字，不再走公式
         function computeProfit(o) {
-            let gross = num(o.settlementAmount) - num(o.procurementCost) - num(o.freight);
-            let profit = o.isPartnerOrder ? gross / 2 : gross;
+            let gross = num(o.settlementAmount) - num(o.procurementCost) - num(o.freight) - num(o.otherFee);
+            let autoProfit = o.isPartnerOrder ? gross / 2 : gross;
+            let profit = (o.profitOverride !== null && o.profitOverride !== undefined) ? num(o.profitOverride) : autoProfit;
             let unitProfit = profit / 2;
-            return { profit, unitProfit };
+            return { profit, unitProfit, autoProfit };
         }
 
         // "是否新客户"：按自然年判断——某客户在数据里最早出现的那一年，视为其"首年"，
@@ -606,7 +633,7 @@
                 let already = financeOrders.some(f => f.linkedOrderNo === o.orderNo && !f.deleted);
                 let badge = already ? '<span class="badge badge-yes">已导入过，点击刷新</span>' : '<span>→</span>';
                 return `<div class="mini-list-item" onclick='selectCustomerOrderImport(${JSON.stringify(o.orderNo)})'>
-                    <div class="info"><b>${escapeHtml(o.orderNo)}　${escapeHtml(o.customerShort || o.customerCompany || '')}</b><span>${formatDate(o.orderDate)} ｜ 订单金额 ${fmtMoney(orderAmount)}</span></div>
+                    <div class="info"><b>${escapeHtml(o.orderNo)}　${escapeHtml(o.customerShort || o.customerCompany || '')}</b><span>${formatDate(o.orderDate)} ｜ 订单金额 ${fmtMoney(orderAmount)} ${escapeHtml(o.currency || 'USD')}</span></div>
                     ${badge}
                 </div>`;
             }).join('');
@@ -615,22 +642,20 @@
         function selectCustomerOrderImport(orderNo) {
             let co = (customerOrderImportCache.orders || []).find(o => o.orderNo === orderNo);
             if (!co) return;
-            let bankMap = {};
-            (customerOrderImportCache.bankAccounts || []).forEach(b => { bankMap[b.id] = b.alias ? `${b.alias}（${b.currency || ''}）` : ''; });
 
             let orderAmount = (co.items || []).reduce((s, it) => s + num(it.amount), 0);
-            let receivingAccount = bankMap[co.bankAccountId] || '';
+            let customerLabel = co.customerShort || co.customerCompany || '';
 
             let existing = financeOrders.find(f => f.linkedOrderNo === co.orderNo);
             if (existing) {
-                existing.date = co.orderDate || existing.date;
-                existing.customerCompany = co.customerCompany || existing.customerCompany;
+                // 客户简称/订单金额/币种跟着系统数据刷新；DATE（你记录收款的日期）和收款账户（你自己的提现账户）是你自己的字段，不会被这里覆盖
+                existing.customerCompany = customerLabel || existing.customerCompany;
                 existing.orderAmount = orderAmount;
-                existing.receivingAccount = receivingAccount;
+                existing.currency = co.currency || existing.currency || 'CNY';
                 existing.deleted = false;
                 saveAll();
                 closeModal('customerOrderImportModal');
-                showToast('已刷新这张订单的客户/金额/收款账户信息');
+                showToast('已刷新这张订单的客户简称/订单金额/币种');
                 openOrderDetail(existing.id);
                 return;
             }
@@ -639,10 +664,11 @@
                 id: 'f_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
                 source: 'auto',
                 linkedOrderNo: co.orderNo,
-                date: co.orderDate || '',
-                customerCompany: co.customerCompany || '',
+                date: getToday(), // DATE记的是你收款/记账的日期，不是订单日期，默认今天，之后自己改
+                customerCompany: customerLabel,
                 orderAmount,
-                receivingAccount,
+                currency: co.currency || 'CNY',
+                receivingAccount: '', // 你自己的提现账户，不从系统带，手动填
                 product: '',
                 procurementCost: '',
                 paymentReceived: co.paid ? orderAmount : '',
@@ -755,18 +781,67 @@
             }
         }
 
+        // ====== 订单金额币种（结汇一律是人民币，不需要选） ======
+        function toggleCurrencyCustom() {
+            let isCustom = document.getElementById('fCurrencySelect').value === 'custom';
+            document.getElementById('fCurrencyCustom').style.display = isCustom ? 'block' : 'none';
+        }
+        function getCurrencyValue() {
+            let sel = document.getElementById('fCurrencySelect');
+            return sel.value === 'custom' ? (document.getElementById('fCurrencyCustom').value.trim() || 'CNY') : sel.value;
+        }
+        function setCurrencyValue(value) {
+            let sel = document.getElementById('fCurrencySelect');
+            let options = Array.from(sel.options).map(o => o.value);
+            if (!value) {
+                sel.value = 'CNY';
+                document.getElementById('fCurrencyCustom').style.display = 'none';
+            } else if (options.includes(value)) {
+                sel.value = value;
+                document.getElementById('fCurrencyCustom').style.display = 'none';
+            } else {
+                sel.value = 'custom';
+                document.getElementById('fCurrencyCustom').value = value;
+                document.getElementById('fCurrencyCustom').style.display = 'block';
+            }
+        }
+
         // ====== 视图切换 ======
         function backToList() { document.getElementById('detailView').classList.add('hidden'); document.getElementById('listView').classList.remove('hidden'); renderList(); }
 
+        // 当前详情页里，利润是不是被手动改过（每次打开一条记录时会重新设置这个状态）
+        let profitManuallyEdited = false;
+
         function updateProfitPreview() {
+            if (profitManuallyEdited) {
+                // 已经手动改过利润，这里只根据利润框里当前的数字联动算单利润，不重新套公式覆盖利润本身
+                let profit = num(document.getElementById('fProfit').value);
+                document.getElementById('unitProfitPreview').innerText = `单利润：${fmtMoney(profit / 2)}`;
+                return;
+            }
             let o = {
                 settlementAmount: document.getElementById('fSettlement').value,
                 procurementCost: document.getElementById('fProcurementCost').value,
                 freight: document.getElementById('fFreight').value,
+                otherFee: document.getElementById('fOtherFee').value,
                 isPartnerOrder: document.getElementById('fIsPartnerOrder').checked
             };
-            let { profit, unitProfit } = computeProfit(o);
-            document.getElementById('profitPreview').innerText = `利润：${fmtMoney(profit)}　｜　单利润：${fmtMoney(unitProfit)}`;
+            let { autoProfit } = computeProfit(o);
+            document.getElementById('fProfit').value = autoProfit.toFixed(2);
+            document.getElementById('unitProfitPreview').innerText = `单利润：${fmtMoney(autoProfit / 2)}`;
+        }
+
+        // 用户直接在"利润"框里打字：标记为手动改过，之后结汇/成本/运费/其他费用/合伙人这些再变，也不会把利润框冲掉
+        function onProfitManualEdit() {
+            profitManuallyEdited = true;
+            let profit = num(document.getElementById('fProfit').value);
+            document.getElementById('unitProfitPreview').innerText = `单利润：${fmtMoney(profit / 2)}`;
+        }
+
+        function resetProfitToAuto() {
+            profitManuallyEdited = false;
+            updateProfitPreview();
+            showToast('已恢复按公式自动计算利润，记得保存');
         }
 
         function openOrderDetail(id) {
@@ -783,12 +858,13 @@
                 document.getElementById('fDate').value = o.date || '';
                 document.getElementById('fCustomer').value = o.customerCompany || '';
                 document.getElementById('fOrderAmount').value = o.orderAmount || '';
+                setCurrencyValue(o.currency || 'CNY');
                 setProductValue(o.product || '');
                 document.getElementById('fProcurementCost').value = o.procurementCost || '';
                 document.getElementById('fReceivingAccount').value = o.receivingAccount || '';
-                // 自动订单只有客户/订单金额/日期/收款账户是从系统拉的，锁住不让手动改，想改要重新去"导入客户订单"里选一次刷新；
-                // 产品大类和采购成本现在始终可以自己填/改，不受来源限制
-                ['fDate','fCustomer','fOrderAmount','fReceivingAccount'].forEach(id2 => {
+                // 自动订单只有客户简称/订单金额是从系统拉的，锁住不让手动改，想改要重新去"导入客户订单"里选一次刷新；
+                // DATE（你记收款的日期）、产品大类、采购成本、收款账户（你的提现账户）现在始终可以自己填/改，不受来源限制
+                ['fCustomer','fOrderAmount','fCurrencySelect','fCurrencyCustom'].forEach(id2 => {
                     document.getElementById(id2).disabled = isAuto;
                 });
                 document.getElementById('fPaymentReceived').value = o.paymentReceived || '';
@@ -796,7 +872,10 @@
                 document.getElementById('fSettlement').value = o.settlementAmount || '';
                 document.getElementById('fVendor').value = o.vendor || '';
                 document.getElementById('fFreight').value = o.freight || '';
+                document.getElementById('fOtherFee').value = o.otherFee || '';
                 document.getElementById('fIsPartnerOrder').checked = !!o.isPartnerOrder;
+                profitManuallyEdited = (o.profitOverride !== null && o.profitOverride !== undefined);
+                if (profitManuallyEdited) document.getElementById('fProfit').value = num(o.profitOverride).toFixed(2);
                 let firstYearMap = computeFirstYearByCustomer();
                 document.getElementById('fIsNewCustomer').checked = effectiveIsNewCustomer(o, firstYearMap);
                 document.getElementById('fCompleted').checked = !!o.completed;
@@ -808,11 +887,13 @@
                 document.getElementById('detailTitle').innerText = '📝 手动添加合伙人订单';
                 document.getElementById('autoOrderHint').style.display = 'none';
                 ['fDate','fCustomer','fOrderAmount','fProcurementCost','fReceivingAccount',
-                 'fPaymentReceived','fSalesperson','fSettlement','fVendor','fFreight','fRemark'].forEach(id2 => {
+                 'fPaymentReceived','fSalesperson','fSettlement','fVendor','fFreight','fOtherFee','fRemark'].forEach(id2 => {
                     document.getElementById(id2).value = '';
                     document.getElementById(id2).disabled = false;
                 });
+                profitManuallyEdited = false;
                 setProductValue('');
+                setCurrencyValue('CNY');
                 document.getElementById('fDate').value = getToday();
                 document.getElementById('fIsPartnerOrder').checked = true;
                 document.getElementById('fIsNewCustomer').checked = false;
@@ -839,11 +920,12 @@
             };
 
             if (!isAuto) {
-                data.date = document.getElementById('fDate').value || getToday();
                 data.customerCompany = customerCompany;
                 data.orderAmount = num(document.getElementById('fOrderAmount').value);
-                data.receivingAccount = document.getElementById('fReceivingAccount').value.trim();
+                data.currency = getCurrencyValue();
             }
+            data.date = document.getElementById('fDate').value || getToday();
+            data.receivingAccount = document.getElementById('fReceivingAccount').value.trim();
             data.product = getProductValue();
             data.procurementCost = num(document.getElementById('fProcurementCost').value);
             data.paymentReceived = num(document.getElementById('fPaymentReceived').value);
@@ -851,11 +933,13 @@
             data.settlementAmount = num(document.getElementById('fSettlement').value);
             data.vendor = document.getElementById('fVendor').value.trim();
             data.freight = num(document.getElementById('fFreight').value);
+            data.otherFee = num(document.getElementById('fOtherFee').value);
             data.isPartnerOrder = document.getElementById('fIsPartnerOrder').checked;
             data.completed = document.getElementById('fCompleted').checked;
             data.profitSplit = document.getElementById('fProfitSplit').checked;
             data.remark = document.getElementById('fRemark').value.trim();
             data.isNewCustomerOverride = document.getElementById('fIsNewCustomer').checked;
+            data.profitOverride = profitManuallyEdited ? num(document.getElementById('fProfit').value) : null;
 
             if (existing) {
                 let idx = financeOrders.findIndex(o => o.id === existing.id);
@@ -911,7 +995,7 @@
             let html = filtered.map(o => {
                 if (o.deleted) {
                     return `<tr style="opacity:0.5;">
-                        <td colspan="18">${formatDate(o.date)}　${escapeHtml(o.customerCompany)}　<span class="badge badge-no">已删除</span>　删除时间：${formatDate(o.deletedAt)}</td>
+                        <td colspan="19">${formatDate(o.date)}　${escapeHtml(o.customerCompany)}　<span class="badge badge-no">已删除</span>　删除时间：${formatDate(o.deletedAt)}</td>
                         <td>—</td>
                     </tr>`;
                 }
@@ -923,7 +1007,7 @@
                     <td>${formatDate(o.date)}</td>
                     <td><span class="order-link" onclick="openOrderDetail('${o.id}')">${escapeHtml(o.customerCompany)}</span></td>
                     <td>${isNew ? '<span class="badge badge-new">新客户</span>' : '—'}</td>
-                    <td>${fmtMoney(num(o.orderAmount))}</td>
+                    <td>${fmtMoney(num(o.orderAmount))} ${escapeHtml(o.currency || 'CNY')}</td>
                     <td>${fmtMoney(num(o.paymentReceived))}</td>
                     <td style="white-space:normal;max-width:200px;">${escapeHtml(o.product) || '—'}</td>
                     <td>${escapeHtml(o.salesperson) || '—'}</td>
@@ -931,6 +1015,7 @@
                     <td>${fmtMoney(num(o.settlementAmount))}</td>
                     <td>${fmtMoney(num(o.procurementCost))}</td>
                     <td>${fmtMoney(num(o.freight))}</td>
+                    <td>${fmtMoney(num(o.otherFee))}</td>
                     <td>${escapeHtml(o.vendor) || '—'}</td>
                     <td style="font-weight:600;color:#0e4b6e;">${fmtMoney(profit)}</td>
                     <td>${fmtMoney(unitProfit)}</td>
@@ -940,7 +1025,7 @@
                     <td><button class="btn btn-outline btn-sm" onclick="openOrderDetail('${o.id}')">编辑</button></td>
                 </tr>`;
             }).join('');
-            document.getElementById('orderTableBody').innerHTML = html || '<tr><td colspan="19" style="padding:30px;text-align:center;">暂无记录，点右上角"同步客户下单系统订单"或"手动添加合伙人订单"</td></tr>';
+            document.getElementById('orderTableBody').innerHTML = html || '<tr><td colspan="20" style="padding:30px;text-align:center;">暂无记录，点右上角"导入客户订单"或"手动添加合伙人订单"</td></tr>';
         }
 
         // ====== 汇总统计 ======
@@ -1046,6 +1131,7 @@
                         date: excelDateToStr(row['DATE'] || row['date'] || row['日期']),
                         customerCompany,
                         orderAmount: num(row['订单金额']),
+                        currency: String(row['币种'] || row['Currency'] || '').trim() || 'CNY',
                         paymentReceived: num(row['收货款']),
                         product: String(row['产品'] || '').trim(),
                         salesperson: String(row['业务员'] || '').trim(),
@@ -1053,12 +1139,14 @@
                         settlementAmount: num(row['结汇']),
                         procurementCost: num(row['采购成本']),
                         freight: num(row['运费']),
+                        otherFee: num(row['其他费用']),
                         vendor: String(row['VENDOR'] || row['Vendor'] || '').trim(),
                         isPartnerOrder: true,
                         completed: yesNoToBool(row['订单是否完结']),
                         profitSplit: yesNoToBool(row['利润分配']),
                         remark: String(row['备注'] || '').trim(),
                         isNewCustomerOverride: row['是否新客户'] !== undefined && row['是否新客户'] !== '' ? yesNoToBool(row['是否新客户']) : null,
+                        profitOverride: null,
                         deleted: false
                     });
                     added++;
@@ -1098,7 +1186,7 @@
                 return { v: v == null ? '' : v, t: typeof v === 'number' ? 'n' : 's', s };
             }
 
-            let headers = ['DATE','客户','是否新客户','订单金额','收货款','产品','业务员','收款账户','结汇','采购成本','运费','VENDOR','利润','单利润','订单是否完结','利润分配','备注'];
+            let headers = ['DATE','客户','是否新客户','订单金额','币种','收货款','产品','业务员','收款账户','结汇(人民币)','采购成本','运费','其他费用','VENDOR','利润','单利润','订单是否完结','利润分配','备注'];
             let aoa = [headers.map(h => cell(h, headFont, centerAlign, border, blueFill))];
 
             active.forEach(o => {
@@ -1109,6 +1197,7 @@
                     cell(o.customerCompany, normalFont, leftAlign, border),
                     cell(isNew ? '是' : '否', normalFont, centerAlign, border),
                     cell(num(o.orderAmount), normalFont, centerAlign, border),
+                    cell(o.currency || 'CNY', normalFont, centerAlign, border),
                     cell(num(o.paymentReceived), normalFont, centerAlign, border),
                     cell(o.product, normalFont, leftAlign, border),
                     cell(o.salesperson, normalFont, centerAlign, border),
@@ -1116,6 +1205,7 @@
                     cell(num(o.settlementAmount), normalFont, centerAlign, border),
                     cell(num(o.procurementCost), normalFont, centerAlign, border),
                     cell(num(o.freight), normalFont, centerAlign, border),
+                    cell(num(o.otherFee), normalFont, centerAlign, border),
                     cell(o.vendor, normalFont, centerAlign, border),
                     cell(Number(profit.toFixed(2)), normalFont, centerAlign, border),
                     cell(Number(unitProfit.toFixed(2)), normalFont, centerAlign, border),
@@ -1127,8 +1217,8 @@
 
             let ws = XLSX.utils.aoa_to_sheet(aoa);
             ws['!cols'] = [
-                { wch: 11 }, { wch: 16 }, { wch: 9 }, { wch: 11 }, { wch: 11 }, { wch: 22 }, { wch: 10 },
-                { wch: 16 }, { wch: 11 }, { wch: 11 }, { wch: 9 }, { wch: 12 }, { wch: 11 }, { wch: 10 },
+                { wch: 11 }, { wch: 16 }, { wch: 9 }, { wch: 11 }, { wch: 8 }, { wch: 11 }, { wch: 22 }, { wch: 10 },
+                { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 11 }, { wch: 10 },
                 { wch: 9 }, { wch: 9 }, { wch: 20 }
             ];
 
