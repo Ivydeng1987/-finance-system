@@ -48,6 +48,12 @@
         .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
         .checkbox-row input { width: auto; }
         .field-hint { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+        .name-search-wrap { position: relative; }
+        .name-suggest { display: none; position: absolute; z-index: 50; top: 100%; left: 0; width: 100%; max-height: 220px; overflow-y: auto; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.12); margin-top: 2px; }
+        .name-suggest.show { display: block; }
+        .name-suggest-item { padding: 7px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+        .name-suggest-item:hover { background: #f8fafc; }
+        .name-suggest-item:last-child { border-bottom: none; }
         .source-tag { display: inline-block; padding: 2px 9px; border-radius: 30px; font-size: 10.5px; font-weight: 500; }
         .source-auto { background: #e0f2fe; color: #0369a1; }
         .source-manual { background: #fce7f3; color: #be185d; }
@@ -119,7 +125,6 @@
                     <option value="auto">系统订单</option>
                     <option value="manual">合伙人订单</option>
                 </select>
-                <label class="checkbox-row" style="margin-left:4px;"><input type="checkbox" id="showDeletedCheckbox" onchange="renderList()"> 显示已删除</label>
                 <div style="flex:1;"></div>
                 <button class="btn btn-outline" onclick="openCustomerOrderImportModal()">📥 导入客户订单</button>
                 <button class="btn btn-outline" onclick="openImportExcelModal()">📊 批量导入Excel</button>
@@ -140,6 +145,7 @@
                             <th>产品</th>
                             <th>业务员</th>
                             <th>收款账户</th>
+                            <th>提现账户</th>
                             <th>结汇</th>
                             <th>采购成本</th>
                             <th>运费</th>
@@ -165,7 +171,7 @@
 
                 <div class="form-row-4">
                     <div class="form-group"><label>DATE（订单日期）</label><input type="date" id="fDate"></div>
-                    <div class="form-group"><label>客户</label><input type="text" id="fCustomer"></div>
+                    <div class="form-group"><label>客户</label><div class="name-search-wrap"><input type="text" id="fCustomer" autocomplete="off" oninput="onCustomerFilterInput(this)" onfocus="onCustomerFilterInput(this)"><div class="name-suggest"></div></div></div>
                     <div class="form-group">
                         <label>订单金额</label>
                         <input type="text" id="fOrderAmount">
@@ -194,6 +200,7 @@
                 <div class="form-row-4">
                     <div class="form-group"><label>业务员/合伙人</label><input type="text" id="fSalesperson"></div>
                     <div class="form-group"><label>收款账户</label><input type="text" id="fReceivingAccount"></div>
+                    <div class="form-group"><label>提现账户</label><div class="name-search-wrap"><input type="text" id="fWithdrawAccount" autocomplete="off" oninput="onWithdrawAccountFilterInput(this)" onfocus="onWithdrawAccountFilterInput(this)"><div class="name-suggest"></div></div></div>
                     <div class="form-group"><label>结汇金额（人民币）</label><input type="text" id="fSettlement" oninput="updateProfitPreview()"></div>
                     <div class="form-group"><label>VENDOR（供应商）</label><input type="text" id="fVendor"></div>
                 </div>
@@ -269,7 +276,7 @@
             <h2>📊 批量导入历史订单（Excel）</h2>
             <div class="import-hint">
                 表头请用这几个名字（顺序不限，多余的列会被忽略）：<br>
-                <b>DATE、客户、是否新客户、订单金额、币种、收货款、产品、业务员、收款账户、结汇、采购成本、运费、其他费用、VENDOR、订单是否完结、利润分配、备注</b><br>
+                <b>DATE、客户、是否新客户、订单金额、币种、收货款、产品、业务员、收款账户、提现账户、结汇、采购成本、运费、其他费用、VENDOR、订单是否完结、利润分配、备注</b><br>
                 "币种"不填默认按人民币(CNY)处理；结汇是人民币金额，不用填币种。<br>
                 "是否新客户"/"订单是否完结"/"利润分配"这三列填"是"或"否"即可；利润和单利润不用填，导入后系统会自动按公式算。<br>
                 导入进来的记录都会标记为"合伙人订单"来源，不会跟"导入客户订单"那个功能产生冲突。
@@ -650,13 +657,13 @@
             let existing = financeOrders.find(f => f.linkedOrderNo === co.orderNo);
             if (existing) {
                 // 客户简称/订单金额/币种跟着系统数据刷新；DATE（你记录收款的日期）和收款账户（你自己的提现账户）是你自己的字段，不会被这里覆盖
+                // 注意：这里只是改内存里的数据，还没推送到云端——跟其它记录一样，要等你点"保存"才会真正写进云端
                 existing.customerCompany = customerLabel || existing.customerCompany;
                 existing.orderAmount = orderAmount;
                 existing.currency = co.currency || existing.currency || 'CNY';
                 existing.deleted = false;
-                saveAll();
                 closeModal('customerOrderImportModal');
-                showToast('已刷新这张订单的客户简称/订单金额/币种');
+                showToast('已刷新客户简称/订单金额/币种，点"保存"才会真正写入云端');
                 openOrderDetail(existing.id);
                 return;
             }
@@ -670,21 +677,23 @@
                 orderAmount,
                 currency: co.currency || 'CNY',
                 receivingAccount: '', // 你自己的提现账户，不从系统带，手动填
+                withdrawAccount: '',
                 product: '',
                 procurementCost: '',
                 paymentReceived: co.paid ? orderAmount : '',
-                settlementAmount: '', freight: '', vendor: '', salesperson: '',
+                settlementAmount: '', freight: '', otherFee: '', vendor: '', salesperson: '',
                 isPartnerOrder: false,
                 completed: !!co.completed,
                 profitSplit: false,
                 remark: '',
                 isNewCustomerOverride: null,
+                profitOverride: null,
                 deleted: false
             };
+            // 先只放进内存，还没推送到云端；她要是点"返回列表"没点保存，这条不会留下任何痕迹
             financeOrders.push(newRecord);
-            saveAll();
             closeModal('customerOrderImportModal');
-            showToast('已导入，请补充产品大类/采购成本等信息后保存');
+            showToast('已带入表单，请补充信息后点"保存"，不点保存不会写入云端');
             openOrderDetail(newRecord.id);
         }
 
@@ -807,6 +816,45 @@
             }
         }
 
+        // ====== 客户/提现账户关键词联想（从你自己历史录过的数据里搜，不用每次重新打一遍）======
+        function getDistinctFieldValues(fieldName) {
+            let set = new Set();
+            financeOrders.filter(o => !o.deleted).forEach(o => { if (o[fieldName]) set.add(o[fieldName]); });
+            return Array.from(set);
+        }
+
+        function renderTextSuggest(inputEl, candidates, targetInputId) {
+            let box = inputEl.parentElement.querySelector('.name-suggest');
+            let kw = inputEl.value.trim().toLowerCase();
+            if (!kw) { box.classList.remove('show'); box.innerHTML = ''; return; }
+            let matches = candidates.filter(v => v.toLowerCase().includes(kw)).slice(0, 8);
+            if (matches.length === 0) { box.classList.remove('show'); box.innerHTML = ''; return; }
+            box.innerHTML = matches.map(v => `<div class="name-suggest-item" onclick="applyTextSuggestion(this, '${targetInputId}')" data-value="${escapeHtml(v)}">${escapeHtml(v)}</div>`).join('');
+            box.classList.add('show');
+        }
+
+        function onCustomerFilterInput(inputEl) {
+            if (inputEl.disabled) return; // 系统订单的客户字段是锁着的，不需要联想
+            renderTextSuggest(inputEl, getDistinctFieldValues('customerCompany'), 'fCustomer');
+        }
+
+        function onWithdrawAccountFilterInput(inputEl) {
+            renderTextSuggest(inputEl, getDistinctFieldValues('withdrawAccount'), 'fWithdrawAccount');
+        }
+
+        function applyTextSuggestion(el, targetInputId) {
+            document.getElementById(targetInputId).value = el.dataset.value;
+            let box = el.closest('.name-suggest');
+            box.classList.remove('show');
+            box.innerHTML = '';
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.name-search-wrap')) {
+                document.querySelectorAll('.name-suggest.show').forEach(el => { el.classList.remove('show'); });
+            }
+        });
+
         // ====== 视图切换 ======
         function backToList() { document.getElementById('detailView').classList.add('hidden'); document.getElementById('listView').classList.remove('hidden'); renderList(); }
 
@@ -863,6 +911,7 @@
                 setProductValue(o.product || '');
                 document.getElementById('fProcurementCost').value = o.procurementCost || '';
                 document.getElementById('fReceivingAccount').value = o.receivingAccount || '';
+                document.getElementById('fWithdrawAccount').value = o.withdrawAccount || '';
                 // 自动订单只有客户简称/订单金额是从系统拉的，锁住不让手动改，想改要重新去"导入客户订单"里选一次刷新；
                 // DATE（你记收款的日期）、产品大类、采购成本、收款账户（你的提现账户）现在始终可以自己填/改，不受来源限制
                 ['fCustomer','fOrderAmount','fCurrencySelect','fCurrencyCustom'].forEach(id2 => {
@@ -887,7 +936,7 @@
                 currentOrderId = null;
                 document.getElementById('detailTitle').innerText = '📝 手动添加合伙人订单';
                 document.getElementById('autoOrderHint').style.display = 'none';
-                ['fDate','fCustomer','fOrderAmount','fProcurementCost','fReceivingAccount',
+                ['fDate','fCustomer','fOrderAmount','fProcurementCost','fReceivingAccount','fWithdrawAccount',
                  'fPaymentReceived','fSalesperson','fSettlement','fVendor','fFreight','fOtherFee','fRemark'].forEach(id2 => {
                     document.getElementById(id2).value = '';
                     document.getElementById(id2).disabled = false;
@@ -927,6 +976,7 @@
             }
             data.date = document.getElementById('fDate').value || getToday();
             data.receivingAccount = document.getElementById('fReceivingAccount').value.trim();
+            data.withdrawAccount = document.getElementById('fWithdrawAccount').value.trim();
             data.product = getProductValue();
             data.procurementCost = num(document.getElementById('fProcurementCost').value);
             data.paymentReceived = num(document.getElementById('fPaymentReceived').value);
@@ -984,7 +1034,6 @@
             let kw = (document.getElementById('searchInput')?.value || '').trim().toLowerCase();
             let yearFilter = document.getElementById('filterYear').value;
             let sourceFilter = document.getElementById('filterSource').value;
-            let showDeleted = document.getElementById('showDeletedCheckbox').checked;
             let firstYearMap = computeFirstYearByCustomer();
 
             let legacyCount = financeOrders.filter(o => !o.deleted && isLegacyRecord(o)).length;
@@ -1000,8 +1049,9 @@
                 banner.innerHTML = '';
             }
 
+            // 已删除的记录一律不显示（软删除仍然保留在数据里，只是没有任何入口能在界面上看到）
             let filtered = financeOrders.filter(o => {
-                if (o.deleted && !showDeleted) return false;
+                if (o.deleted) return false;
                 if (sourceFilter && o.source !== sourceFilter) return false;
                 if (yearFilter && (o.date || '').slice(0, 4) !== yearFilter) return false;
                 if (kw) {
@@ -1013,12 +1063,6 @@
             filtered.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
             let html = filtered.map(o => {
-                if (o.deleted) {
-                    return `<tr style="opacity:0.5;">
-                        <td colspan="19">${formatDate(o.date)}　${escapeHtml(o.customerCompany)}　<span class="badge badge-no">已删除</span>　删除时间：${formatDate(o.deletedAt)}</td>
-                        <td>—</td>
-                    </tr>`;
-                }
                 let { profit, unitProfit } = computeProfit(o);
                 let isNew = effectiveIsNewCustomer(o, firstYearMap);
                 let sourceTag = o.source === 'auto' ? '<span class="source-tag source-auto">系统订单</span>' : '<span class="source-tag source-manual">合伙人订单</span>';
@@ -1033,6 +1077,7 @@
                     <td style="white-space:normal;max-width:200px;">${escapeHtml(o.product) || '—'}</td>
                     <td>${escapeHtml(o.salesperson) || '—'}</td>
                     <td>${escapeHtml(o.receivingAccount) || '—'}</td>
+                    <td>${escapeHtml(o.withdrawAccount) || '—'}</td>
                     <td>${fmtMoney(num(o.settlementAmount))}</td>
                     <td>${fmtMoney(num(o.procurementCost))}</td>
                     <td>${fmtMoney(num(o.freight))}</td>
@@ -1046,7 +1091,7 @@
                     <td><button class="btn btn-outline btn-sm" onclick="openOrderDetail('${o.id}')">编辑</button></td>
                 </tr>`;
             }).join('');
-            document.getElementById('orderTableBody').innerHTML = html || '<tr><td colspan="20" style="padding:30px;text-align:center;">暂无记录，点右上角"导入客户订单"或"手动添加合伙人订单"</td></tr>';
+            document.getElementById('orderTableBody').innerHTML = html || '<tr><td colspan="21" style="padding:30px;text-align:center;">暂无记录，点右上角"导入客户订单"或"手动添加合伙人订单"</td></tr>';
         }
 
         // ====== 汇总统计 ======
@@ -1157,6 +1202,7 @@
                         product: String(row['产品'] || '').trim(),
                         salesperson: String(row['业务员'] || '').trim(),
                         receivingAccount: String(row['收款账户'] || '').trim(),
+                        withdrawAccount: String(row['提现账户'] || '').trim(),
                         settlementAmount: num(row['结汇']),
                         procurementCost: num(row['采购成本']),
                         freight: num(row['运费']),
@@ -1207,7 +1253,7 @@
                 return { v: v == null ? '' : v, t: typeof v === 'number' ? 'n' : 's', s };
             }
 
-            let headers = ['DATE','客户','是否新客户','订单金额','币种','收货款','产品','业务员','收款账户','结汇(人民币)','采购成本','运费','其他费用','VENDOR','利润','单利润','订单是否完结','利润分配','备注'];
+            let headers = ['DATE','客户','是否新客户','订单金额','币种','收货款','产品','业务员','收款账户','提现账户','结汇(人民币)','采购成本','运费','其他费用','VENDOR','利润','单利润','订单是否完结','利润分配','备注'];
             let aoa = [headers.map(h => cell(h, headFont, centerAlign, border, blueFill))];
 
             active.forEach(o => {
@@ -1223,6 +1269,7 @@
                     cell(o.product, normalFont, leftAlign, border),
                     cell(o.salesperson, normalFont, centerAlign, border),
                     cell(o.receivingAccount, normalFont, leftAlign, border),
+                    cell(o.withdrawAccount, normalFont, leftAlign, border),
                     cell(num(o.settlementAmount), normalFont, centerAlign, border),
                     cell(num(o.procurementCost), normalFont, centerAlign, border),
                     cell(num(o.freight), normalFont, centerAlign, border),
@@ -1239,7 +1286,7 @@
             let ws = XLSX.utils.aoa_to_sheet(aoa);
             ws['!cols'] = [
                 { wch: 11 }, { wch: 16 }, { wch: 9 }, { wch: 11 }, { wch: 8 }, { wch: 11 }, { wch: 22 }, { wch: 10 },
-                { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 11 }, { wch: 10 },
+                { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 11 }, { wch: 9 }, { wch: 10 }, { wch: 12 }, { wch: 11 }, { wch: 10 },
                 { wch: 9 }, { wch: 9 }, { wch: 20 }
             ];
 
